@@ -14,7 +14,6 @@ SOURCES += \
     cwmpd/src/process.c \
     cwmpd/src/thread.c \
     libcwmp/src/buffer.c \
-    libcwmp/src/callback.c \
     libcwmp/src/cfg.c \
     libcwmp/src/cwmp.c \
     libcwmp/src/event.c \
@@ -37,7 +36,8 @@ SOURCES += \
     libxmlet/src/node.c \
     libxmlet/src/parser.c \
     libxmlet/src/xmlet.c \
-    libxmlet/src/xmlbuffer.c
+    libxmlet/src/xmlbuffer.c \
+    libcwmp/src/task.c
 
 HEADERS += \
     cwmpd/include/cwmp_agent.h \
@@ -72,7 +72,8 @@ HEADERS += \
     libxmlet/include/cwmp/xmlet.h \
     libxmlet/src/inc/xmlbuffer.h \
     libxmlet/src/inc/xmlparser.h \
-    config.h
+    config.h \
+    libcwmp/src/task.h
 
 INCLUDEPATH += \
     libcwmp/include \
