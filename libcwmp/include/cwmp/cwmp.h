@@ -20,6 +20,7 @@
 #include <cwmp/buffer.h>
 #include <cwmp/event.h>
 #include <cwmp/queue.h>
+#include <cwmp/task.h>
 
 
 #define ASSERT assert
