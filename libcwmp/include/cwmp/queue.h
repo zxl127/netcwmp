@@ -43,7 +43,7 @@ int queue_is_empty(queue_t *q);
 void queue_push(struct queue_t *q, struct qnode_t *node);
 void queue_push_before(struct queue_t *q, struct qnode_t *pos,struct qnode_t *node);
 void queue_pop(struct queue_t *q, struct qnode_t *node);
-void queue_free(struct queue_t *q);
+void queue_free(pool_t *pool, struct queue_t *q);
 void queue_view(queue_t *q);
 
 

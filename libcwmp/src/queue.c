@@ -26,7 +26,7 @@ int queue_is_empty(queue_t *q)
         return 1;
 }
 
-void queue_push(struct queue_t *q, struct qnode_t *node)
+void queue_push(queue_t *q, qnode_t *node)
 {
     if(!q || !node)
         return;
@@ -43,7 +43,7 @@ void queue_push(struct queue_t *q, struct qnode_t *node)
     pthread_mutex_unlock(& q->mutex);
 }
 
-void queue_push_before(struct queue_t *q, struct qnode_t *pos,struct qnode_t *node)
+void queue_push_before(queue_t *q, qnode_t *pos, qnode_t *node)
 {
     if(!q || !pos || !node)
         return;
@@ -60,7 +60,7 @@ void queue_push_before(struct queue_t *q, struct qnode_t *pos,struct qnode_t *no
     pthread_mutex_unlock(& q->mutex);
 }
 
-void queue_pop(struct queue_t *q, struct qnode_t *node)
+void queue_pop(queue_t *q, qnode_t *node)
 {
     if(!q || !node)
         return;
@@ -78,17 +78,16 @@ void queue_pop(struct queue_t *q, struct qnode_t *node)
     pthread_mutex_unlock(& q->mutex);
 }
 
-void queue_free(struct queue_t *q)
+void queue_free(pool_t *pool, queue_t *q)
 {
     struct qnode_t *node;
 
     if(!q)
         return;
     pthread_mutex_lock(& q->mutex);
-    for (node = q->first; node ; node = q->first)
-    {
-        queue_delete(q, node);
-        free(node);
+    for (node = q->first; node ; node = q->first) {
+        queue_pop(q, node);
+        pool_pfree(pool, node);
     }
     pthread_mutex_unlock(& q->mutex);
     pool_pfree(pool, q);
