@@ -81,7 +81,7 @@ int cpe_get_igd_di_uptime(cwmp_t * cwmp, const char * name, char ** value, pool_
 }
 
 int cpe_set_attr_UpTime(cwmp_t * cwmp, const char * name, int notiChange, int noti, 
-						parameter_list_t *accList, int accListChange, callback_register_func_t callback_reg)
+                        parameter_list_t *accList, int accListChange)
 {
 	return cwmp_set_parameter_attributes(cwmp, name, notiChange, noti);
 }
@@ -105,7 +105,7 @@ int cpe_get_igd_ms_period_intval(cwmp_t * cwmp, const char * name, char ** value
     return FAULT_CODE_OK;
 }
 
-int cpe_set_igd_ms_period_intval(cwmp_t *cwmp, const char *name, const char *value, int length, callback_register_func_t callback_reg)
+int cpe_set_igd_ms_period_intval(cwmp_t *cwmp, const char *name, const char *value, int length)
 {
     cwmp_conf_set("cwmp:interval", value);
 
@@ -126,7 +126,7 @@ int cpe_get_igd_ms_connectionrequestusername(cwmp_t * cwmp, const char * name, c
     return FAULT_CODE_OK;
 }
 
-int cpe_set_igd_ms_connectionrequestusername(cwmp_t *cwmp, const char *name, const char *value, int length, callback_register_func_t callback_reg)
+int cpe_set_igd_ms_connectionrequestusername(cwmp_t *cwmp, const char *name, const char *value, int length)
 {
     cwmp_conf_set("cwmp:acs_username", value);
 
@@ -140,33 +140,33 @@ int cpe_get_igd_ms_connectionrequestpassword(cwmp_t * cwmp, const char * name, c
     return FAULT_CODE_OK;
 }
 
-int cpe_set_igd_ms_connectionrequestpassword(cwmp_t *cwmp, const char *name, const char *value, int length, callback_register_func_t callback_reg)
+int cpe_set_igd_ms_connectionrequestpassword(cwmp_t *cwmp, const char *name, const char *value, int length)
 {
     cwmp_conf_set("cwmp:acs_password", value);
 
     return FAULT_CODE_OK;
 }
 
-int  cpe_refresh_igd_wandevice(cwmp_t * cwmp, parameter_node_t * param_node, callback_register_func_t callback_reg)
+int  cpe_refresh_igd_wandevice(cwmp_t * cwmp, parameter_node_t * param_node)
 {
     cwmp_refresh_i_parameter(cwmp, param_node, 1);
-    cwmp_model_refresh_object(cwmp, param_node, 0, callback_reg);
+    cwmp_model_refresh_object(cwmp, param_node, 0);
 
     return FAULT_CODE_OK;
 }
 
-int  cpe_refresh_igd_wanconnectiondevice(cwmp_t * cwmp, parameter_node_t * param_node, callback_register_func_t callback_reg)
+int  cpe_refresh_igd_wanconnectiondevice(cwmp_t * cwmp, parameter_node_t * param_node)
 {
     cwmp_refresh_i_parameter(cwmp, param_node, 1);
-    cwmp_model_refresh_object(cwmp, param_node, 0, callback_reg);
+    cwmp_model_refresh_object(cwmp, param_node, 0);
 
     return FAULT_CODE_OK;
 }
 
-int  cpe_refresh_igd_wanipconnection(cwmp_t * cwmp, parameter_node_t * param_node, callback_register_func_t callback_reg)
+int  cpe_refresh_igd_wanipconnection(cwmp_t * cwmp, parameter_node_t * param_node)
 {
     cwmp_refresh_i_parameter(cwmp, param_node, 1);
-    cwmp_model_refresh_object(cwmp, param_node, 0, callback_reg);
+    cwmp_model_refresh_object(cwmp, param_node, 0);
 
     return FAULT_CODE_OK;
 }

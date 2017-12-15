@@ -1249,7 +1249,7 @@ int cwmp_set_parameter_node_value(cwmp_t * cwmp, parameter_node_t * node, const 
     }
     if (node->set)
     {
-        return (*node->set)(cwmp, name,  value, value_length, callback_register_task);
+        return (*node->set)(cwmp, name,  value, value_length);
     }
     else
     {
@@ -1474,7 +1474,7 @@ void cwmp_refresh_special_param(env_t * env, parameter_node_t * pn, char * path_
     {
         if (pn->refresh)
         {
-            pn->refresh(env->cwmp, pn, callback_register_task);
+            pn->refresh(env->cwmp, pn);
         }
     }
 }
@@ -1628,7 +1628,7 @@ int  cwmp_parse_setparametervalues_message(env_t * env , xmldoc_t * doc, paramet
             if(pn->set)
             {
 				//exec set function
-				parameter->fault_code =  (*pn->set)(env->cwmp, name,  value, TRstrlen(value), callback_register_task);
+                parameter->fault_code =  (*pn->set)(env->cwmp, name,  value, TRstrlen(value));
             }
 		    else
 		    {
@@ -1743,11 +1743,7 @@ int  cwmp_parse_setparameterattributes_message(env_t * env , xmldoc_t * doc, par
 														atoi(notificationChange), 
 														atoi(notification),
 														accessList,
-														atoi(accessListChange), 
-														callback_register_task);
-
-														
-														
+                                                        atoi(accessListChange));
             }
 		    else
 		    {
@@ -1866,7 +1862,7 @@ int cwmp_parse_addobject_message(env_t * env , xmldoc_t *doc, parameter_node_t *
         return CWMP_ERROR;
     }
 
-    fault_code = param->add(env->cwmp, param, &instance_num, callback_register_task);
+    fault_code = param->add(env->cwmp, param, &instance_num);
 
     if(fault_code != FAULT_CODE_OK)
     {
@@ -1924,7 +1920,7 @@ int cwmp_parse_deleteobject_message(env_t * env , xmldoc_t *doc, parameter_node_
 
     instance_num = TRatoi(param->name);
 
-    fault_code = param->parent->del(env->cwmp, param, instance_num, callback_register_task);
+    fault_code = param->parent->del(env->cwmp, param, instance_num);
 
     if(fault_code != FAULT_CODE_OK)
     {

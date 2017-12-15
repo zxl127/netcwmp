@@ -19,7 +19,7 @@ struct model_func_st
 int cwmp_model_load_xml(cwmp_t * cwmp, const char * xmlfile, model_func_t * func_list, int func_count);
 int cwmp_model_copy_parameter(parameter_node_t * param, parameter_node_t ** new_param, int instance_number);
 void cwmp_refresh_i_parameter(cwmp_t * cwmp, parameter_node_t * param_node, int instance_number);
-int cwmp_model_refresh_object(cwmp_t * cwmp, parameter_node_t *param, int flag, callback_register_func_t callback_reg);
+int cwmp_model_refresh_object(cwmp_t * cwmp, parameter_node_t *param, int flag);
 
 
 

@@ -14,12 +14,11 @@
 #define __CWMP_H__
 
 #include <cwmp/xmlet.h>
-#include <cwmp/types.h>
+//#include <cwmp/types.h>
 #include <cwmp/util.h>
 #include <cwmp/memory.h>
 #include <cwmp/buffer.h>
 #include <cwmp/event.h>
-#include <cwmp/queue.h>
 #include <cwmp/task.h>
 
 
@@ -299,9 +298,10 @@ struct cwmp_st
 
 	event_global_t    event_global;
 
-	transfer_t    transfer_info;      //ÓÃÓÚDownloadºÍUpload
+	transfer_t    transfer_info;      //ï¿½ï¿½ï¿½ï¿½Downloadï¿½ï¿½Upload
 
-	queue_t  *	queue;
+    task_queue_t *task_priority;
+    task_queue_t *task_time;
 
 	pool_t * pool;
 	parameter_node_t * root;

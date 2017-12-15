@@ -163,10 +163,6 @@ struct http_socket_t
     
 };
 
-int callback_register_task(cwmp_t * cwmp, callback_func_t callback, void *data1, void *data2);
-
-
-
 
 
 #endif

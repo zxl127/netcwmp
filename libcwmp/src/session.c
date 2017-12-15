@@ -15,6 +15,7 @@
 #include "cwmp/log.h"
 #include "cwmp/cwmp.h"
 #include "cwmp_private.h"
+#include "cwmp/task_list.h"
 
 
 
@@ -968,7 +969,7 @@ xmldoc_t *  cwmp_session_create_download_response_message(cwmp_session_t * sessi
 		{
 			cwmp_t * cwmp = session->cwmp;
 
-			queue_push(cwmp->queue, newdlarg, TASK_DOWNLOAD_TAG);
+            task_register(cwmp, task_download, newdlarg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
 
 			cwmp_log_debug("push new download task to queue! url: %s ", newdlarg->url);
 
@@ -1009,8 +1010,8 @@ xmldoc_t *  cwmp_session_create_upload_response_message(cwmp_session_t * session
 		if(newularg)
 		{
 			cwmp_t * cwmp = session->cwmp;
-			queue_push(cwmp->queue, newularg, TASK_UPLOAD_TAG);
-			cwmp_log_debug("push new upload task to queue! url: %s ", newularg->url);
+            task_register(cwmp, task_upload, newularg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
+            cwmp_log_debug("push new upload task to queue! url: %s ", newularg->url);
 		}
     }
 	time_t endtime = time(NULL);
@@ -1085,7 +1086,7 @@ xmldoc_t *  cwmp_session_create_reboot_response_message(cwmp_session_t * session
     rv = cwmp_parse_reboot_message(session->env, doc, &key, &fault);
 
     cwmp_t * cwmp = session->cwmp;
-    queue_push(cwmp->queue, NULL, TASK_REBOOT_TAG);
+    task_register(cwmp, task_reboot, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
 
     return cwmp_create_reboot_response_message(session->env, header);
 }
@@ -1105,7 +1106,7 @@ xmldoc_t *  cwmp_session_create_factoryreset_response_message(cwmp_session_t * s
     }
 
     cwmp_t * cwmp = session->cwmp;
-    queue_push(cwmp->queue, NULL, TASK_FACTORYRESET_TAG);
+    task_register(cwmp, task_factoryreset, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
 
     return cwmp_create_factoryreset_response_message(session->env, header);
 }

@@ -23,7 +23,6 @@ SOURCES += \
     libcwmp/src/md5.c \
     libcwmp/src/memory.c \
     libcwmp/src/model.c \
-    libcwmp/src/queue.c \
     libcwmp/src/session.c \
     libcwmp/src/ssl.c \
     libcwmp/src/util.c \
@@ -37,7 +36,8 @@ SOURCES += \
     libxmlet/src/parser.c \
     libxmlet/src/xmlet.c \
     libxmlet/src/xmlbuffer.c \
-    libcwmp/src/task.c
+    libcwmp/src/task.c \
+    libcwmp/src/task_list.c
 
 HEADERS += \
     cwmpd/include/cwmp_agent.h \
@@ -61,7 +61,6 @@ HEADERS += \
     libcwmp/include/cwmp/md5.h \
     libcwmp/include/cwmp/memory.h \
     libcwmp/include/cwmp/model.h \
-    libcwmp/include/cwmp/queue.h \
     libcwmp/include/cwmp/session.h \
     libcwmp/include/cwmp/types.h \
     libcwmp/include/cwmp/util.h \
@@ -73,7 +72,8 @@ HEADERS += \
     libxmlet/src/inc/xmlbuffer.h \
     libxmlet/src/inc/xmlparser.h \
     config.h \
-    libcwmp/include/cwmp/task.h
+    libcwmp/include/cwmp/task.h \
+    libcwmp/include/cwmp/task_list.h
 
 INCLUDEPATH += \
     libcwmp/include \

@@ -34,7 +34,6 @@
 #include <cwmp/session.h>
 #include <cwmp/log.h>
 #include <cwmp/event.h>
-#include <cwmp/queue.h>
 
 #include "cwmp_type.h"
 #include "cwmp_conf.h"

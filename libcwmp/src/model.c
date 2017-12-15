@@ -425,7 +425,7 @@ static int cwmp_model_init_object(cwmp_t * cwmp, parameter_node_t *param)
         //调用refresh函数
         if(param->refresh)
         {
-            param->refresh(cwmp, param, callback_register_task);
+            param->refresh(cwmp, param);
         }
     }
 
@@ -438,7 +438,7 @@ static int cwmp_model_init_object(cwmp_t * cwmp, parameter_node_t *param)
 }
 
 
-int cwmp_model_refresh_object(cwmp_t * cwmp, parameter_node_t *param, int flag, callback_register_func_t callback_reg)
+int cwmp_model_refresh_object(cwmp_t * cwmp, parameter_node_t *param, int flag)
 {
     parameter_node_t     *node = NULL;
 
@@ -451,7 +451,7 @@ int cwmp_model_refresh_object(cwmp_t * cwmp, parameter_node_t *param, int flag, 
     {
         if(param->refresh)
         {
-            param->refresh(cwmp, param, callback_reg);
+            param->refresh(cwmp, param);
         }
     }
 
@@ -459,7 +459,7 @@ int cwmp_model_refresh_object(cwmp_t * cwmp, parameter_node_t *param, int flag, 
     {
         if(TRstrcmp(param->name, "{i}") != 0)
         {
-            cwmp_model_refresh_object(cwmp, node, 1, callback_reg);
+            cwmp_model_refresh_object(cwmp, node, 1);
         }
     }
 

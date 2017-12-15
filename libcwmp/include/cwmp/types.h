@@ -237,29 +237,24 @@ typedef struct diag_routehops_st diag_routehops_t;
 typedef struct diag_traceroute_st diag_traceroute_t;
 
 
-
-typedef int (*callback_func_t)(void *arg1, void *arg2);
-typedef int (*callback_register_func_t)(cwmp_t * cwmp, callback_func_t, void * arg1, void *arg2);
-
 typedef int   	(*parameter_get_handler_pt)(cwmp_t * cwmp, const char * param_name, char ** value, pool_t * pool);
 
-typedef int     (*parameter_set_handler_pt)(cwmp_t * cwmp, const char * param_name, const char * value, int length, callback_register_func_t callback_reg);
+typedef int     (*parameter_set_handler_pt)(cwmp_t * cwmp, const char * param_name, const char * value, int length);
 
-typedef int     (*parameter_notify_handler_pt)(cwmp_t * cwmp, const char * param_name, const char * value, int length, callback_register_func_t callback_reg);
+typedef int     (*parameter_notify_handler_pt)(cwmp_t * cwmp, const char * param_name, const char * value, int length);
 
-typedef int     (*parameter_add_handler_pt)(cwmp_t * cwmp, parameter_node_t * param_node, int *pinstance_number, callback_register_func_t callback_reg);
+typedef int     (*parameter_add_handler_pt)(cwmp_t * cwmp, parameter_node_t * param_node, int *pinstance_number);
 
-typedef int     (*parameter_del_handler_pt)(cwmp_t * cwmp, parameter_node_t * param_node, int instance_number,  callback_register_func_t callback_reg);
+typedef int     (*parameter_del_handler_pt)(cwmp_t * cwmp, parameter_node_t * param_node, int instance_number);
 
-typedef int     (*parameter_refresh_handler_pt)(cwmp_t * cwmp, parameter_node_t * param_node, callback_register_func_t callback_reg ); 
+typedef int     (*parameter_refresh_handler_pt)(cwmp_t * cwmp, parameter_node_t * param_node);
 
 typedef int     (*parameter_setattr_handler_pt)(cwmp_t * cwmp, 
 												const char * name, 
 												int noticationChange, 
 												int notication, 
 												parameter_list_t *accList,
-												int accListChange,
-												callback_register_func_t callback_reg);
+                                                int accListChange);
 
 typedef int   	(*parameter_getattr_handler_pt)(cwmp_t * cwmp, const char * obj_name, char ** attrs, pool_t * pool);
 
