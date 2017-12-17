@@ -839,104 +839,7 @@ xmldoc_t *  cwmp_session_create_getparameterattributes_response_message(cwmp_ses
     return cwmp_create_getparameterattr_response_message(session->env, header, session->root, obj_node);
 }
 
-int receive_file(const char *fromurl, const char * pUsername, const char * pPassword)
-{
-    int ret;
-    char *fileName;
-    char tofile[256];
-    char buff[512];
-
-    if(!fromurl)
-        return -1;
-
-    fileName = GetBasename(fromurl);
-    if(!fileName)
-        return -1;
-    sprintf(tofile, "/tmp/%s", fileName);
-
-    if(access(tofile, F_OK) == 0)
-    {
-        sprintf(buff, "rm %s", tofile);
-        system(buff);
-    }
-
-    if (pUsername == NULL || strlen(pUsername) == 0)
-    {
-        sprintf(buff, "wget -t 2 %s -O %s", fromurl, tofile);
-    }
-    else
-    {
-        if(!TRstrncasecmp("ftp://", fromurl, 6))
-        {
-            sprintf(buff, "wget -t 2 ftp://%s:%s@%s -O %s",
-                pUsername,
-                pPassword == NULL? "" : pPassword,
-                fromurl + 6,
-                tofile);
-        }
-        else
-        {
-            sprintf(buff, "wget -t 2 --http-user=%s --http-password=%s %s -O %s", pUsername, 
-                pPassword == NULL? "" : pPassword, fromurl, tofile);
-        }
-    }
-    // cwmp_log_debug("Download firmware: %s", buff);
-    ret = system(buff);
-    if((-1 != ret) && (WIFEXITED(ret)) && (!(WEXITSTATUS(ret))))
-        return 0;
-    else
-    {
-        // cwmp_log_debug("Download firmware: using origin http download", buff);
-        ret = http_receive_file(fromurl, tofile);
-        if(ret == 0 || ret == 200) // HTTP/1.1 200
-            return 0;
-        else
-            return -1;
-    }
-}
-
-int cwmp_download_file(download_arg_t * dlarg)
-{
-    int faultcode = 0;
-    char * fromurl = dlarg->url;
-
-    FUNCTION_TRACE();
-    
-    cwmp_log_info("cwmp_agent_download_file url[%s] usr[%s] pwd[%s] type[%s] fsize[%d]\r\n",
-    			dlarg->url, 
-    			dlarg->username, 
-    			dlarg->password, 
-    			dlarg->filetype, 
-    			dlarg->filesize);
-
-    if(receive_file(dlarg->url, dlarg->username, dlarg->password) < 0)
-        faultcode = 9001;
-    else
-        faultcode = CWMP_OK;
-
-    return faultcode;
-
-}
-
 int required_download(download_arg_t * dlarg) {
-	
-    char * fromurl = dlarg->url;
-    char tofile[256], flagfile[256];
-	char *fileName = GetBasename(fromurl);
-	sprintf(tofile, "/tmp/%s", fileName);
-	
-	sprintf(flagfile, "/usr/upgrade_flag_%s", fileName);
-	if (cmd_file_exist(flagfile)) {
-		return CWMP_ERROR;
-	}
-
-	char *deviceType = "CPE";
-	
-	cwmp_log_debug("File: %s, DeviceType: %s", tofile, deviceType);
-	if (strstr(tofile, deviceType) == NULL) {
-		return CWMP_ERROR;
-	}
-
 	return CWMP_OK;
 }
 
@@ -957,9 +860,6 @@ xmldoc_t *  cwmp_session_create_download_response_message(cwmp_session_t * sessi
 
     rv = cwmp_parse_download_message(session->env, doc, &dlarg, &fault);
 
-    //add download arg to taskqueue
-    //begin download process
-	
 	int status = 0;
 	time_t starttime = time(NULL);
     if(rv == CWMP_OK)
@@ -967,17 +867,10 @@ xmldoc_t *  cwmp_session_create_download_response_message(cwmp_session_t * sessi
 		download_arg_t * newdlarg = cwmp_clone_download_arg(dlarg);
 		if(newdlarg != NULL /*&& required_download(newdlarg) == CWMP_OK*/)
 		{
+            status = 1;
 			cwmp_t * cwmp = session->cwmp;
-
-            task_register(cwmp, task_download, newdlarg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
-
+            task_register(cwmp, cwmp_task_download_file, newdlarg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
 			cwmp_log_debug("push new download task to queue! url: %s ", newdlarg->url);
-
-			//begin download file
-		    if (cwmp_download_file(newdlarg) == CWMP_OK)
-		    {
-			    status = 1;
-		    }
 		}
 
     }
@@ -1003,20 +896,21 @@ xmldoc_t *  cwmp_session_create_upload_response_message(cwmp_session_t * session
 
     rv = cwmp_parse_upload_message(session->env, doc, &uparg, &fault);
 
+    int status = 0;
 	time_t starttime = time(NULL);
     if(rv == CWMP_OK)
     {
 		upload_arg_t * newularg = cwmp_clone_upload_arg(uparg);
 		if(newularg)
 		{
+            status = 1;
 			cwmp_t * cwmp = session->cwmp;
-            task_register(cwmp, task_upload, newularg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
+            task_register(cwmp, cwmp_task_upload_file, newularg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
             cwmp_log_debug("push new upload task to queue! url: %s ", newularg->url);
 		}
     }
 	time_t endtime = time(NULL);
 
-    int status = 0;
     return cwmp_create_upload_response_message(session->env, header, status, &starttime, &endtime);
 
 }
@@ -1086,7 +980,7 @@ xmldoc_t *  cwmp_session_create_reboot_response_message(cwmp_session_t * session
     rv = cwmp_parse_reboot_message(session->env, doc, &key, &fault);
 
     cwmp_t * cwmp = session->cwmp;
-    task_register(cwmp, task_reboot, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
+    task_register(cwmp, cwmp_task_reboot, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
 
     return cwmp_create_reboot_response_message(session->env, header);
 }
@@ -1106,7 +1000,7 @@ xmldoc_t *  cwmp_session_create_factoryreset_response_message(cwmp_session_t * s
     }
 
     cwmp_t * cwmp = session->cwmp;
-    task_register(cwmp, task_factoryreset, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
+    task_register(cwmp, cwmp_task_factoryreset, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
 
     return cwmp_create_factoryreset_response_message(session->env, header);
 }

@@ -29,8 +29,7 @@
 #include <cwmp/session.h>
 #include "modules/data_model.h"
 #include "cwmp/task.h"
-
-#define CWMP_TRUE   1
+#include "cwmp/task_list.h"
 
 #define MAX_SESSION_RETRY 3
 
@@ -121,32 +120,6 @@ int cwmp_agent_create_datetimes(datatime_t *nowtime)
     return CWMP_OK;
 }
 
-int cwmp_check_if_active_event_is_exist(cwmp_t *cwmp)
-{
-    event_code_t * ev;
-    int i=0;
-    int flag=0;
-    
-    //FUNCTION_TRACE();
-
-    event_code_t ** pec = cwmp->el->events;
-    int elsize = cwmp->el->count;
-    
-    for(i=0; i<elsize; i++)
-    {      
-		if(pec[i]  && pec[i]->ref > 0)
-        {
-         	flag = 1;
-            break;	
-        }
-    }
-    
-    return flag;
-}
-
-
-
-
 int cwmp_agent_send_request(cwmp_session_t * session)
 {
     FUNCTION_TRACE();
@@ -176,276 +149,6 @@ int clear_and_cwmp_event_set_array(cwmp_t *cwmp,   int count, int event[],   int
 							(start==NULL)?0:start[i], 
 							(end==NULL)?0:end[i]);
 }
-
-
-static cwmp_t *heart_beat_cwmp = NULL; 
-
-void heart_beat(int sig)
-{
-    int inform_interval = cwmp_conf_get_int("cwmp:interval");
-
-    cwmp_event_set_value(heart_beat_cwmp, INFORM_PERIODIC, 1, NULL, 0, 0, 0);
-    // signal(SIGALRM, heart_beat);
-    alarm(inform_interval);
-}
-
-static int is_first_heart_beat = 1;
-void start_heart_beat(cwmp_t * cwmp)
-{
-	heart_beat_cwmp = cwmp;
-	signal(SIGALRM, heart_beat);
-	int seconds = cwmp_conf_get_int("cwmp:interval");
-	if (seconds <= 0) seconds = 240;
-
-	if (is_first_heart_beat) {
-		is_first_heart_beat = 0;
-		if (seconds < 30) {
-			seconds = 30;
-		}
-	}
-	
-	alarm(seconds);
-}
-
-void cwmp_agent_create_session(cwmp_t *cwmp)
-{
-    int rv;
-    cwmp_session_t * session;
-    int session_close = CWMP_NO;
-    xmldoc_t * newdoc;
-    FUNCTION_TRACE();
-
-    int is_boot_success = 0;
-    int reconnect_count = 0;
-
-    cwmp->new_request = CWMP_NO;
-    session = cwmp_session_create(cwmp);
-    session->timeout = cwmp_conf_get_int("cwmpd:http_timeout");
-
-    cwmp_session_open(session);
-
-    while (!session_close)
-    {
-        cwmp_log_debug("session status: %d", session->status);
-
-        switch (session->status)
-        {
-        case CWMP_ST_START:
-            //create a new connection to acs
-            cwmp_log_debug(">>>>>>SESSION STATUS: NEW START");
-
-            if (cwmp_session_connect(session, cwmp->acs_url) != CWMP_OK)
-            {
-                cwmp_log_error("connect to acs: %s failed.\n", cwmp->acs_url);
-                session->status = CWMP_ST_RETRY;
-            }
-            else
-            {
-                session->status = CWMP_ST_INFORM;
-            }
-            break;
-        case CWMP_ST_INFORM:
-            cwmp_log_debug(">>>>>>SESSION STATUS: INFORM");
-
-            if (cwmp->acs_auth)
-            {
-                cwmp_log_debug("CWMP_ST_INFORM set auth");
-                cwmp_session_set_auth(session,   cwmp->acs_user  , cwmp->acs_pwd );
-            }
-
-            newdoc = cwmp_session_create_inform_message(session, session->envpool);
-            cwmp_write_doc_to_chunk(newdoc, session->writers,  session->envpool);
-            session->last_method = CWMP_INFORM_METHOD;
-            session->status = CWMP_ST_SEND;
-
-            break;
-
-        case CWMP_ST_SEND:
-            cwmp_log_debug(">>>>>>SESSION STATUS: SEND");
-
-            cwmp_log_debug("session data request length: %d", cwmp_chunk_length(session->writers));
-            session->newdata = CWMP_NO;
-
-            rv = cwmp_agent_send_request(session);
-
-
-            if (rv == CWMP_OK)
-            {
-                cwmp_log_debug("session data sended OK, rv=%d", rv);
-                session->status = CWMP_ST_RECV;
-            }
-            else
-            {
-                cwmp_log_debug("session data sended faild! rv=%d", rv);
-                session->status = CWMP_ST_EXIT;
-
-                /*
-                    if (rv == CWMP_COULDNOT_CONNECT)
-                    {
-                        session->status = CWMP_ST_RETRY;
-                    }
-                    else
-                    {
-                        session->status = CWMP_ST_EXIT;
-                    }
-                    */
-            }
-            break;
-
-        case CWMP_ST_RECV:
-            cwmp_log_debug(">>>>>>SESSION STATUS: RECV");
-            cwmp_chunk_clear(session->readers);
-
-            rv = cwmp_agent_recv_response(session);
-
-            if (rv == CWMP_OK)
-            {
-                session->status = CWMP_ST_ANSLYSE;
-            }
-            else
-            {
-                session->status = CWMP_ST_END;
-            }
-            break;
-
-        case CWMP_ST_ANSLYSE:
-            cwmp_log_debug(">>>>>>SESSION STATUS: ANSLYSE");
-            rv = cwmp_agent_analyse_session(session);
-            if (rv == CWMP_OK)
-            {
-                if (session->close) {
-                    if (!is_boot_success && reconnect_count++ < 100) {
-                        // boot send failed, then reconnect
-                        session->reconnect = CWMP_YES;
-                        cwmp_log_debug("Boot failed, sleep 10 seconds, then reconnect");
-                        sleep(10);
-                    }
-                    session->status = CWMP_ST_END;
-                } else {
-                    is_boot_success = 1;
-                    session->status = CWMP_ST_SEND;
-                }
-
-                if (access(TR069_BOOTSTRAP_FLAG, F_OK) < 0)
-                {
-                    cmd_touch(TR069_BOOTSTRAP_FLAG);
-                }
-            }
-            else
-            {
-                session->status = CWMP_ST_END;
-            }
-            break;
-        case CWMP_ST_RETRY:
-            cwmp_log_debug(">>>>>>SESSION STATUS: RETRY");
-            if (cwmp_agent_retry_session(session) == CWMP_TIMEOUT)
-            {
-                cwmp_log_debug("session retry timeover, go out");
-                session->status = CWMP_ST_EXIT;
-            }
-            else
-            {
-                session->status = CWMP_ST_START;
-            }
-            break;
-        case CWMP_ST_END:
-            //close connection of ACS
-            cwmp_log_debug(">>>>>>SESSION STATUS: END");
-            //run task from queue
-
-            if (session->newdata == CWMP_YES && session->close == CWMP_NO)
-            {
-                session->status = CWMP_ST_SEND;
-            }
-            else
-            {
-                session->status = CWMP_ST_EXIT;
-            }
-            break;
-
-        case CWMP_ST_EXIT:
-            cwmp_log_debug(">>>>>>SESSION STATUS: EXIT");
-            if (session->reconnect == CWMP_YES)
-            {
-                session->reconnect = CWMP_NO;
-                session->status = CWMP_ST_START;
-            } else {
-                session_close = CWMP_YES;
-                cwmp_session_close(session);
-            }
-            break;
-
-
-        default:
-            cwmp_log_debug(">>>>>>SESSION STATUS: Unknown session stutus");
-            break;
-        }//end switch
-    }//end while(!session_close)
-
-    cwmp_log_debug("session stutus: EXIT");
-    cwmp_session_free(session);
-    session = NULL;
-
-}
-
-void inform_task(void *arg)
-{
-    int interval = 0;
-
-    cwmp_t *cwmp = (cwmp_t *)arg;
-    interval = cwmp_conf_get_int("cwmp:interval");
-    cwmp_event_set_value(cwmp, INFORM_PERIODIC, 1, NULL, 0, 0, 0);
-    task_register(cwmp, inform_task, arg, interval, TASK_TYPE_TIME);
-
-    cwmp->new_request = CWMP_YES;
-}
-
-void cwmp_agent_start_session(cwmp_t * cwmp)
-{
-    FUNCTION_TRACE();
-
-    int interval = cwmp_conf_get_int("cwmp:interval");
-    task_register(cwmp, inform_task, (void *)cwmp, interval, TASK_TYPE_TIME);
-    while(TRUE)
-    {
-        if(cwmp->new_request == CWMP_YES)
-            cwmp_agent_create_session(cwmp);
-        cwmp_agent_run_tasks(cwmp);
-    }
-/*
-    while (TRUE)
-    {
-        if (cwmp->new_request == CWMP_NO)
-        {
-            cwmp_log_debug("No new req");
-            sleep(1);
-			
-			if(is_first_heart_beat || !access(TR069_INFORM_FLAG_FILE, F_OK)){
-				is_first_heart_beat = 0;
-				remove(TR069_INFORM_FLAG_FILE);
-	    		start_heart_beat(cwmp);
-			}
-
-            if(cwmp_check_if_active_event_is_exist(cwmp)==0)
-            	continue ;
-
-            cwmp_log_debug("cwmp_check_if_active_event_is_exist Not Zero\n"); 	
-        }
-        
-        cwmp_log_debug("New request from ACS");
-        
-
-		int newtaskres = cwmp_agent_run_tasks(cwmp);
-		if(newtaskres == CWMP_YES)
-		{
-			cwmp->new_request = CWMP_YES;
-		}
-	
-
-    }//end while(TRUE)
-*/
-}
-
 
 xmldoc_t * cwmp_end_tranfer_session(cwmp_session_t * session)
 {
@@ -709,70 +412,6 @@ void cwmp_agent_session(cwmp_t * cwmp)
     cwmp_agent_start_session(cwmp);
 }
 
-int cwmp_agent_download_file(download_arg_t * dlarg)
-{
-    int faultcode = 0;
-    char * fromurl = dlarg->url;
-    char * tofile = "/tmp/download.img";
-
-    FUNCTION_TRACE();
-    
-    cwmp_log_info("cwmp_agent_download_file url[%s] usr[%s] pwd[%s] type[%s] fsize[%d]\r\n",
-    			dlarg->url, 
-    			dlarg->username, 
-    			dlarg->password, 
-    			dlarg->filetype, 
-    			dlarg->filesize);
-	faultcode = CWMP_OK;
-
-	
-    faultcode = http_receive_file(fromurl, tofile);
-	if(faultcode == 200) // HTTP/1.1 200
-		faultcode = CWMP_OK;
-		
-    if(faultcode != CWMP_OK)
-    {
-	    faultcode = 9001;
-    }
-
-    return faultcode;
-
-}
-
-
-
-int cwmp_agent_upload_file(upload_arg_t * ularg)
-{
-    int faultcode = 0;
-    FUNCTION_TRACE();
-    char * fromfile;
-
-	cwmp_log_info("ularg->filetype: %s", ularg->filetype);
-
-	if(strcmp(ularg->filetype, "1 Vendor Configuration File") == 0)
-	{
-		fromfile = "/tmp/configuration";
-	}
-	else if(strcmp(ularg->filetype, "2 Vendor Log File") == 0)
-	{
-		fromfile = "/tmp/log_file";
-	}
-	else
-	{
-		fromfile = "";
-	}
-	cwmp_log_info("Upload: %s", fromfile);
-	
-    faultcode = http_send_file(fromfile, ularg->url);
-
-    if(faultcode != CWMP_OK)
-    {
-		faultcode = 9001;
-    }
-
-    return faultcode;
-}
-
 int cwmp_agent_run_tasks(cwmp_t * cwmp)
 {
     struct timeval now;
@@ -780,104 +419,227 @@ int cwmp_agent_run_tasks(cwmp_t * cwmp)
     task_queue_t *task_time = cwmp->task_time;
     task_queue_t *task_priority = cwmp->task_priority;
 
-    gettimeofday(&now, NULL);
     if(task_time) {
-        for(task = task_time->first; task; task->next) {
+        for(task = task_time->first; task; task = task->next) {
+            gettimeofday(&now, NULL);
             if(timeval_cmp(&now, &task->u.time) >= 0) {
-                task->task(task->arg);
-                task_unregister(cwmp, task, TASK_TYPE_TIME);
+                if(task->task) {
+                    cwmp_log_debug("task start time: %d", now.tv_sec);
+                    task->task((void *)cwmp, task);
+                    task_unregister(cwmp, task, TASK_TYPE_TIME);
+                }
             }
             else
                 break;
-            gettimeofday(&now, NULL);
         }
     }
 
     if(task_priority) {
-        for(task = task_priority; task; task->next)
+        for(task = task_priority->first; task; task = task->next)
         {
-            task->task(task->arg);
+            if(task->task)
+                task->task((void *)cwmp, task);
         }
     }
 
 }
-/*
-int cwmp_agent_run_tasks(cwmp_t * cwmp)
+
+void cwmp_agent_create_session(cwmp_t *cwmp)
 {
-	void * data;
-	int tasktype = 0;;
-	int ok = CWMP_NO;
+    int rv;
+    cwmp_session_t * session;
+    int session_close = CWMP_NO;
+    xmldoc_t * newdoc;
+    FUNCTION_TRACE();
 
-	FUNCTION_TRACE();
-	
-	while(1)
-	{
-		tasktype = queue_pop(cwmp->queue, &data);
-		if(tasktype == -1)
-		{
-			cwmp_log_debug("no more task to run");
-			break;
-		}
-		ok = CWMP_YES;
-		switch(tasktype)
-		{
-			case TASK_DOWNLOAD_TAG:
-				{
-					download_arg_t * dlarg = (download_arg_t*)data;
-					time_t starttime = time(NULL);
-                    int faultcode = 0;
-				    //download process	
-					time_t endtime = time(NULL);
-					cwmp_event_set_value(cwmp, INFORM_TRANSFERCOMPLETE, 1,dlarg->cmdkey, faultcode, starttime, endtime);
-					cwmp_event_clear_active(cwmp);
-					
-					FREE(dlarg);
-				}
-				break;
+    int is_boot_success = 0;
+    int reconnect_count = 0;
 
-			case TASK_UPLOAD_TAG:
-				{
-					upload_arg_t * ularg = (upload_arg_t*)data;
-					time_t starttime = time(NULL);
-					int faultcode = 0;
-		
-					faultcode = cwmp_agent_upload_file(ularg);
-					
-					time_t endtime = time(NULL);
-					cwmp_event_set_value(cwmp, INFORM_TRANSFERCOMPLETE, 1,ularg->cmdkey, faultcode, starttime, endtime);
-					
-					FREE(ularg);
-				}
-				break;
+    cwmp->new_request = CWMP_NO;
+    session = cwmp_session_create(cwmp);
+    session->timeout = cwmp_conf_get_int("cwmpd:http_timeout");
 
-			case TASK_REBOOT_TAG:
-				{
-					cwmp_event_set_value(cwmp, INFORM_MREBOOT, 1, NULL, 0, 0, 0);
-					cwmp_event_clear_active(cwmp);
-                    system("reboot");
-					exit(1);
-				}
-				break;
+    cwmp_session_open(session);
 
-			case TASK_FACTORYRESET_TAG:
-				{
-					remove(TR069_BOOTSTRAP_FLAG);
-					remove(TR069_REBOOT_FLAG);
-					cwmp_event_set_value(cwmp, INFORM_BOOTSTRAP, 1, NULL, 0, 0, 0);
-					cwmp_event_clear_active(cwmp);
-					exit(1);
-				}
-				break;
+    while (!session_close)
+    {
+        cwmp_log_debug("session status: %d", session->status);
 
-			default:
+        switch (session->status)
+        {
+        case CWMP_ST_START:
+            //create a new connection to acs
+            cwmp_log_debug(">>>>>>SESSION STATUS: NEW START");
 
-				break;
+            if (cwmp_session_connect(session, cwmp->acs_url) != CWMP_OK)
+            {
+                cwmp_log_error("connect to acs: %s failed.\n", cwmp->acs_url);
+                session->status = CWMP_ST_RETRY;
+            }
+            else
+            {
+                session->status = CWMP_ST_INFORM;
+            }
+            break;
+        case CWMP_ST_INFORM:
+            cwmp_log_debug(">>>>>>SESSION STATUS: INFORM");
 
-		}
-	}
+            if (cwmp->acs_auth)
+            {
+                cwmp_log_debug("CWMP_ST_INFORM set auth");
+                cwmp_session_set_auth(session,   cwmp->acs_user  , cwmp->acs_pwd );
+            }
 
-	return ok;
+            newdoc = cwmp_session_create_inform_message(session, session->envpool);
+            cwmp_write_doc_to_chunk(newdoc, session->writers,  session->envpool);
+            session->last_method = CWMP_INFORM_METHOD;
+            session->status = CWMP_ST_SEND;
+
+            break;
+
+        case CWMP_ST_SEND:
+            cwmp_log_debug(">>>>>>SESSION STATUS: SEND");
+
+            cwmp_log_debug("session data request length: %d", cwmp_chunk_length(session->writers));
+            session->newdata = CWMP_NO;
+
+            rv = cwmp_agent_send_request(session);
+
+
+            if (rv == CWMP_OK)
+            {
+                cwmp_log_debug("session data sended OK, rv=%d", rv);
+                session->status = CWMP_ST_RECV;
+            }
+            else
+            {
+                cwmp_log_debug("session data sended faild! rv=%d", rv);
+                session->status = CWMP_ST_EXIT;
+
+                /*
+                    if (rv == CWMP_COULDNOT_CONNECT)
+                    {
+                        session->status = CWMP_ST_RETRY;
+                    }
+                    else
+                    {
+                        session->status = CWMP_ST_EXIT;
+                    }
+                    */
+            }
+            break;
+
+        case CWMP_ST_RECV:
+            cwmp_log_debug(">>>>>>SESSION STATUS: RECV");
+            cwmp_chunk_clear(session->readers);
+
+            rv = cwmp_agent_recv_response(session);
+
+            if (rv == CWMP_OK)
+            {
+                session->status = CWMP_ST_ANSLYSE;
+            }
+            else
+            {
+                session->status = CWMP_ST_END;
+            }
+            break;
+
+        case CWMP_ST_ANSLYSE:
+            cwmp_log_debug(">>>>>>SESSION STATUS: ANSLYSE");
+            rv = cwmp_agent_analyse_session(session);
+            if (rv == CWMP_OK)
+            {
+                if (session->close) {
+                    if (!is_boot_success && reconnect_count++ < 100) {
+                        // boot send failed, then reconnect
+                        session->reconnect = CWMP_YES;
+                        cwmp_log_debug("Boot failed, sleep 10 seconds, then reconnect");
+                        sleep(10);
+                    }
+                    session->status = CWMP_ST_END;
+                } else {
+                    is_boot_success = 1;
+                    session->status = CWMP_ST_SEND;
+                }
+
+                if (access(TR069_BOOTSTRAP_FLAG, F_OK) < 0)
+                {
+                    cmd_touch(TR069_BOOTSTRAP_FLAG);
+                }
+            }
+            else
+            {
+                session->status = CWMP_ST_END;
+            }
+            break;
+        case CWMP_ST_RETRY:
+            cwmp_log_debug(">>>>>>SESSION STATUS: RETRY");
+            if (cwmp_agent_retry_session(session) == CWMP_TIMEOUT)
+            {
+                cwmp_log_debug("session retry timeover, go out");
+                session->status = CWMP_ST_EXIT;
+            }
+            else
+            {
+                session->status = CWMP_ST_START;
+            }
+            break;
+        case CWMP_ST_END:
+            //close connection of ACS
+            cwmp_log_debug(">>>>>>SESSION STATUS: END");
+            //run task from queue
+
+            if (session->newdata == CWMP_YES && session->close == CWMP_NO)
+            {
+                session->status = CWMP_ST_SEND;
+            }
+            else
+            {
+                session->status = CWMP_ST_EXIT;
+            }
+            break;
+
+        case CWMP_ST_EXIT:
+            cwmp_log_debug(">>>>>>SESSION STATUS: EXIT");
+            if (session->reconnect == CWMP_YES)
+            {
+                session->reconnect = CWMP_NO;
+                session->status = CWMP_ST_START;
+            } else {
+                session_close = CWMP_YES;
+                cwmp_session_close(session);
+            }
+            break;
+
+
+        default:
+            cwmp_log_debug(">>>>>>SESSION STATUS: Unknown session stutus");
+            break;
+        }//end switch
+    }//end while(!session_close)
+
+    cwmp_log_debug("session stutus: EXIT");
+    cwmp_session_free(session);
+    session = NULL;
+
 }
-*/
+
+void cwmp_agent_start_session(cwmp_t * cwmp)
+{
+    FUNCTION_TRACE();
+
+    int interval = cwmp_conf_get_int("cwmp:interval");
+    cwmp_log_debug("interval = %d", interval);
+    task_register(cwmp, cwmp_task_inform, (void *)cwmp, interval, TASK_TYPE_TIME);
+    while(TRUE)
+    {
+        if(cwmp->new_request == CWMP_YES)
+            cwmp_agent_create_session(cwmp);
+        cwmp_agent_run_tasks(cwmp);
+        sleep(2);
+        cwmp_log_debug("No new request");
+    }
+}
 
 
