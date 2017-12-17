@@ -3,7 +3,7 @@
 
 #include "types.h"
 
-typedef void (*task_func_t)(void *arg);
+typedef void (*task_func_t)(void *arg1, void *arg2);
 
 typedef enum {
     TASK_TYPE_PRIORITY,
@@ -18,7 +18,7 @@ typedef enum {
 
 typedef struct task_t{
     union {
-        int priority;
+        task_priority_t priority;
         struct timeval time;
     } u;
     void *arg;

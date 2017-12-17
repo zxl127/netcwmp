@@ -13,7 +13,7 @@ int timeval_cmp(struct timeval *t1, struct timeval *t2)
 task_queue_t *task_queue_create(pool_t *pool)
 {
     if(!pool)
-        return;
+        return NULL;
 
     task_queue_t *queue = (task_queue_t *)pool_pcalloc(pool, sizeof(task_queue_t));
     if(queue == NULL) return NULL;
@@ -118,7 +118,6 @@ task_t *task_register(cwmp_t *cwmp, void *task, void *arg, int seq, task_type_t 
 
     switch (type) {
     case TASK_TYPE_PRIORITY:
-        ptask->u.priority = (task_priority_t)seq;
         q = cwmp->task_priority;
         if(!q)
             return NULL;
@@ -126,9 +125,9 @@ task_t *task_register(cwmp_t *cwmp, void *task, void *arg, int seq, task_type_t 
             if((task_priority_t)seq > pos->u.priority)
                 break;
         }
+        ptask->u.priority = (task_priority_t)seq;
         break;
     case TASK_TYPE_TIME:
-        ptask->u.time = now;
         q = cwmp->task_time;
         if(!q)
             return NULL;
@@ -138,14 +137,13 @@ task_t *task_register(cwmp_t *cwmp, void *task, void *arg, int seq, task_type_t 
             if(timeval_cmp(&now, &pos->u.time) < 0)
                 break;
         }
+        ptask->u.time = now;
         break;
     default:
         cwmp_log_debug("unkown task type");
         break;
     }
 
-    if(!q)
-        return NULL;
     if(pos)
         task_push_before(q, pos, ptask);
     else
@@ -159,6 +157,9 @@ void task_unregister(cwmp_t *cwmp, task_t *task, task_type_t type)
     task_t *ptask = NULL;
     task_queue_t *q = NULL;
 
+    if(!task)
+        return;
+
     switch (type) {
     case TASK_TYPE_PRIORITY:
         q = cwmp->task_priority;
@@ -171,7 +172,7 @@ void task_unregister(cwmp_t *cwmp, task_t *task, task_type_t type)
         break;
     }
 
-    if(!q || !task)
+    if(!q)
         return;
 
     for(ptask = q->first; ptask; ptask = ptask->next)
