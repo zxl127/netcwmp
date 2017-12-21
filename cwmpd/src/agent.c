@@ -447,13 +447,9 @@ int cwmp_agent_run_tasks(cwmp_t * cwmp)
 void cwmp_agent_create_session(cwmp_t *cwmp)
 {
     int rv;
-    cwmp_session_t * session;
     int session_close = CWMP_NO;
+    cwmp_session_t * session;
     xmldoc_t * newdoc;
-    FUNCTION_TRACE();
-
-    int is_boot_success = 0;
-    int reconnect_count = 0;
 
     cwmp->new_request = CWMP_NO;
     session = cwmp_session_create(cwmp);
@@ -516,16 +512,14 @@ void cwmp_agent_create_session(cwmp_t *cwmp)
                 cwmp_log_debug("session data sended faild! rv=%d", rv);
                 session->status = CWMP_ST_EXIT;
 
-                /*
-                    if (rv == CWMP_COULDNOT_CONNECT)
-                    {
-                        session->status = CWMP_ST_RETRY;
-                    }
-                    else
-                    {
-                        session->status = CWMP_ST_EXIT;
-                    }
-                    */
+//                if (rv == CWMP_COULDNOT_CONNECT)
+//                {
+//                    session->status = CWMP_ST_RETRY;
+//                }
+//                else
+//                {
+//                    session->status = CWMP_ST_EXIT;
+//                }
             }
             break;
 
@@ -550,23 +544,7 @@ void cwmp_agent_create_session(cwmp_t *cwmp)
             rv = cwmp_agent_analyse_session(session);
             if (rv == CWMP_OK)
             {
-                if (session->close) {
-                    if (!is_boot_success && reconnect_count++ < 100) {
-                        // boot send failed, then reconnect
-                        session->reconnect = CWMP_YES;
-                        cwmp_log_debug("Boot failed, sleep 10 seconds, then reconnect");
-                        sleep(10);
-                    }
-                    session->status = CWMP_ST_END;
-                } else {
-                    is_boot_success = 1;
-                    session->status = CWMP_ST_SEND;
-                }
-
-                if (access(TR069_BOOTSTRAP_FLAG, F_OK) < 0)
-                {
-                    cmd_touch(TR069_BOOTSTRAP_FLAG);
-                }
+                session->status = CWMP_ST_SEND;
             }
             else
             {
