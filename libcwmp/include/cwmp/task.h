@@ -2,8 +2,7 @@
 #define __TASK_H__
 
 #include "types.h"
-
-typedef void (*task_func_t)(void *arg1, void *arg2);
+#include "cwmp/list.h"
 
 typedef enum {
     TASK_TYPE_PRIORITY,
@@ -16,21 +15,50 @@ typedef enum {
     TASK_PRIORITY_HIGH
 } task_priority_t;
 
-typedef struct task_t{
-    union {
-        task_priority_t priority;
-        struct timeval time;
-    } u;
-    void *arg;
-    task_func_t task;
-    struct task_t *prev;
-    struct task_t *next;
+typedef struct u_fd
+{
+    int fd;
+    bool eof;
+    bool error;
+    bool registered;
+    uint8_t flags;
+
+    void (*handler)(struct u_fd *f, unsigned int events);
+} ufd_t;
+
+typedef struct u_timer
+{
+    struct list_head list;
+
+    bool waiting;
+    struct timeval time;
+
+    void (*handler)(struct u_timer *timer);
+} utimer_t;
+
+struct task_handler {
+    void (*run)(task_queue_t *q, task_t *t);
+    void (*kill)(task_queue_t *q, task_t *t);
+    void (*complete)(task_queue_t *q, task_t *t);
+};
+
+typedef struct {
+    struct list_head list;
+
+    pid_t pid;
+    int timeout;
+    bool running;
+    utimer_t *timer;
+    struct task_handler handler;
 } task_t;
 
 typedef struct {
-    int size;
-    task_t *first;
-    task_t *last;
+    task_t *head;
+
+    bool stopped;
+    int max_tasks;
+    int running_tasks;
+    int max_running_tasks;
 
     pthread_mutex_t     mutex;
 } task_queue_t;

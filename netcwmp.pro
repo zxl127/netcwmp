@@ -73,7 +73,8 @@ HEADERS += \
     libxmlet/src/inc/xmlparser.h \
     config.h \
     libcwmp/include/cwmp/task.h \
-    libcwmp/include/cwmp/task_list.h
+    libcwmp/include/cwmp/task_list.h \
+    libcwmp/include/cwmp/list.h
 
 INCLUDEPATH += \
     libcwmp/include \
