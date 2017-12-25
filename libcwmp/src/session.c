@@ -869,7 +869,7 @@ xmldoc_t *  cwmp_session_create_download_response_message(cwmp_session_t * sessi
 		{
             status = 1;
 			cwmp_t * cwmp = session->cwmp;
-            task_register(cwmp, cwmp_task_download_file, newdlarg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
+//            task_register(cwmp, cwmp_task_download_file, newdlarg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
 			cwmp_log_debug("push new download task to queue! url: %s ", newdlarg->url);
 		}
 
@@ -905,7 +905,7 @@ xmldoc_t *  cwmp_session_create_upload_response_message(cwmp_session_t * session
 		{
             status = 1;
 			cwmp_t * cwmp = session->cwmp;
-            task_register(cwmp, cwmp_task_upload_file, newularg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
+//            task_register(cwmp, cwmp_task_upload_file, newularg, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
             cwmp_log_debug("push new upload task to queue! url: %s ", newularg->url);
 		}
     }
@@ -980,7 +980,7 @@ xmldoc_t *  cwmp_session_create_reboot_response_message(cwmp_session_t * session
     rv = cwmp_parse_reboot_message(session->env, doc, &key, &fault);
 
     cwmp_t * cwmp = session->cwmp;
-    task_register(cwmp, cwmp_task_reboot, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
+//    task_register(cwmp, cwmp_task_reboot, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
 
     return cwmp_create_reboot_response_message(session->env, header);
 }
@@ -1000,7 +1000,7 @@ xmldoc_t *  cwmp_session_create_factoryreset_response_message(cwmp_session_t * s
     }
 
     cwmp_t * cwmp = session->cwmp;
-    task_register(cwmp, cwmp_task_factoryreset, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
+//    task_register(cwmp, cwmp_task_factoryreset, NULL, TASK_PRIORITY_LOW, TASK_TYPE_PRIORITY);
 
     return cwmp_create_factoryreset_response_message(session->env, header);
 }

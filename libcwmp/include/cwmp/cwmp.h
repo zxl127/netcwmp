@@ -300,8 +300,7 @@ struct cwmp_st
 
 	transfer_t    transfer_info;      //����Download��Upload
 
-    task_queue_t *task_priority;
-    task_queue_t *task_time;
+    task_queue_t *tasks;
 
 	pool_t * pool;
 	parameter_node_t * root;

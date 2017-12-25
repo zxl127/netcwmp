@@ -416,31 +416,6 @@ int cwmp_agent_run_tasks(cwmp_t * cwmp)
 {
     struct timeval now;
     task_t *task = NULL;
-    task_queue_t *task_time = cwmp->task_time;
-    task_queue_t *task_priority = cwmp->task_priority;
-
-    if(task_time) {
-        for(task = task_time->first; task; task = task->next) {
-            gettimeofday(&now, NULL);
-            if(timeval_cmp(&now, &task->u.time) >= 0) {
-                if(task->task) {
-                    cwmp_log_debug("task start time: %d", now.tv_sec);
-                    task->task((void *)cwmp, task);
-                    task_unregister(cwmp, task, TASK_TYPE_TIME);
-                }
-            }
-            else
-                break;
-        }
-    }
-
-    if(task_priority) {
-        for(task = task_priority->first; task; task = task->next)
-        {
-            if(task->task)
-                task->task((void *)cwmp, task);
-        }
-    }
 
 }
 
@@ -609,13 +584,17 @@ void cwmp_agent_start_session(cwmp_t * cwmp)
 
     int interval = cwmp_conf_get_int("cwmp:interval");
     cwmp_log_debug("interval = %d", interval);
-    task_register(cwmp, cwmp_task_inform, (void *)cwmp, interval, TASK_TYPE_TIME);
+//    task_register(cwmp, cwmp_task_inform, (void *)cwmp, interval, TASK_TYPE_TIME);
+
     while(TRUE)
     {
         if(cwmp->new_request == CWMP_YES)
             cwmp_agent_create_session(cwmp);
-        cwmp_agent_run_tasks(cwmp);
-        sleep(2);
+//        cwmp_agent_run_tasks(cwmp);
+//        sleep(2);
+        task_queue_init(cwmp->tasks);
+        task_queue_loop(cwmp->tasks);
+        tasks_done(cwmp->tasks);
         cwmp_log_debug("No new request");
     }
 }

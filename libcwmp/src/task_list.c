@@ -99,7 +99,7 @@ void cwmp_task_inform(void *arg1, void *arg2)
     cwmp_event_set_value(cwmp, INFORM_PERIODIC, 1, NULL, 0, 0, 0);
     cwmp->new_request = CWMP_YES;
 
-    task_register(cwmp, cwmp_task_inform, NULL, interval, TASK_TYPE_TIME);
+//    task_register(cwmp, cwmp_task_inform, NULL, interval, TASK_TYPE_TIME);
 }
 
 void cwmp_task_download_file(void *arg1, void *arg2)
@@ -108,7 +108,7 @@ void cwmp_task_download_file(void *arg1, void *arg2)
     int faultcode = 0;
     cwmp_t *cwmp = (cwmp_t *)arg1;
     task_t *task = (task_t *)arg2;
-    download_arg_t * dlarg = (download_arg_t*)task->arg;
+    download_arg_t * dlarg;// = (download_arg_t*)task->arg;
 
     cwmp_log_info("cwmp_agent_download_file url[%s] usr[%s] pwd[%s] type[%s] fsize[%d]\r\n",
                 dlarg->url,
@@ -129,7 +129,7 @@ void cwmp_task_download_file(void *arg1, void *arg2)
 
     FREE(dlarg);
 
-    task_unregister(cwmp, task, TASK_TYPE_PRIORITY);
+//    task_unregister(cwmp, task, TASK_TYPE_PRIORITY);
 }
 
 void cwmp_task_upload_file(void *arg1, void *arg2)
@@ -138,7 +138,7 @@ void cwmp_task_upload_file(void *arg1, void *arg2)
     int faultcode = 0;
     cwmp_t *cwmp = (cwmp_t *)arg1;
     task_t *task = (task_t *)arg2;
-    upload_arg_t * ularg = (upload_arg_t*)task->arg;
+    upload_arg_t * ularg;// = (upload_arg_t*)task->arg;
 
     time_t starttime = time(NULL);
     faultcode = cwmp_agent_upload_file(ularg);
@@ -148,7 +148,7 @@ void cwmp_task_upload_file(void *arg1, void *arg2)
 
     FREE(ularg);
 
-    task_unregister(cwmp, task, TASK_TYPE_PRIORITY);
+//    task_unregister(cwmp, task, TASK_TYPE_PRIORITY);
 }
 
 void cwmp_task_reboot(void *arg1, void *arg2)
@@ -161,7 +161,7 @@ void cwmp_task_reboot(void *arg1, void *arg2)
     cwmp_event_clear_active(cwmp);
 //    system("reboot");
 
-    task_unregister(cwmp, task, TASK_TYPE_PRIORITY);
+//    task_unregister(cwmp, task, TASK_TYPE_PRIORITY);
 
 //    exit(1);
 }
@@ -177,7 +177,7 @@ void cwmp_task_factoryreset(void *arg1, void *arg2)
     cwmp_event_set_value(cwmp, INFORM_BOOTSTRAP, 1, NULL, 0, 0, 0);
     cwmp_event_clear_active(cwmp);
 
-    task_unregister(cwmp, task, TASK_TYPE_PRIORITY);
+//    task_unregister(cwmp, task, TASK_TYPE_PRIORITY);
 
 //    exit(1);
 }

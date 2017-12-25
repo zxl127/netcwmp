@@ -4,6 +4,15 @@
 #include "types.h"
 #include "cwmp/list.h"
 
+
+#define EVENT_READ              0x01
+#define EVENT_WRITE             0x02
+#define EVENT_EDGE_TRIGGER      0x04
+
+typedef struct u_timer utimer_t;
+typedef struct u_task task_t;
+typedef struct u_task_queue task_queue_t;
+
 typedef enum {
     TASK_TYPE_PRIORITY,
     TASK_TYPE_TIME,
@@ -21,12 +30,12 @@ typedef struct u_fd
     bool eof;
     bool error;
     bool registered;
-    uint8_t flags;
+    unsigned int events;
 
-    void (*handler)(struct u_fd *f, unsigned int events);
+    void (*handler)(struct u_fd *f);
 } ufd_t;
 
-typedef struct u_timer
+struct u_timer
 {
     struct list_head list;
 
@@ -34,7 +43,7 @@ typedef struct u_timer
     struct timeval time;
 
     void (*handler)(struct u_timer *timer);
-} utimer_t;
+};
 
 struct task_handler {
     void (*run)(task_queue_t *q, task_t *t);
@@ -42,7 +51,7 @@ struct task_handler {
     void (*complete)(task_queue_t *q, task_t *t);
 };
 
-typedef struct {
+struct u_task{
     struct list_head list;
 
     pid_t pid;
@@ -50,10 +59,10 @@ typedef struct {
     bool running;
     utimer_t *timer;
     struct task_handler handler;
-} task_t;
+};
 
-typedef struct {
-    task_t *head;
+struct u_task_queue{
+    struct list_head head;
 
     bool stopped;
     int max_tasks;
@@ -61,17 +70,18 @@ typedef struct {
     int max_running_tasks;
 
     pthread_mutex_t     mutex;
-} task_queue_t;
+};
 
-int timeval_cmp(struct timeval *t1, struct timeval *t2);
-task_queue_t *task_queue_create(pool_t *pool);
-int task_is_empty(task_queue_t *q);
-void task_push(task_queue_t *q, task_t *task);
-void task_push_before(task_queue_t *q, task_t *pos, task_t *task);
-void task_pop(task_queue_t *q, task_t *task);
-void task_queue_free(pool_t *pool, task_queue_t *q);
-task_t *task_register(cwmp_t *cwmp, void *task, void *arg, int seq, task_type_t type);
-void task_unregister(cwmp_t *cwmp, task_t *task, task_type_t type);
-
+int timer_add(utimer_t *timer);
+void timer_cancel(utimer_t *timer);
+int timer_set(utimer_t *timer, int msecs);
+int timer_remaining(utimer_t *timer);
+void task_add(task_queue_t *q, task_t *task);
+void task_delete(task_queue_t *q, task_t *task);
+int ufd_add(ufd_t *sock, unsigned int events);
+int ufd_delete(ufd_t *fd);
+void task_queue_init(task_queue_t *q);
+int task_queue_loop(task_queue_t *q);
+void tasks_done(task_queue_t *q);
 
 #endif //__TASK_H__
