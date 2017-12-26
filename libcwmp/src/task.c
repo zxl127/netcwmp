@@ -8,7 +8,6 @@
 #define ARRAY_SIZE(arr)      (sizeof(arr) / sizeof((arr)[0]))
 
 static struct list_head timer_list = LIST_HEAD_INIT(timer_list);
-static struct list_head proc_list = LIST_HEAD_INIT(proc_list);
 
 static int task_cancelled = false;
 static int task_exit = false;
@@ -20,8 +19,6 @@ static int poll_fd = -1;
 
 static int tv_diff(struct timeval *t1, struct timeval *t2)
 {
-    if(!t1 || !t2)
-        return 0;
     return (t1->tv_sec - t2->tv_sec) * 1000 + (t1->tv_usec - t2->tv_usec) / 1000;
 }
 
@@ -39,7 +36,7 @@ int timer_add(utimer_t *timer)
     utimer_t *tmp;
     struct list_head *h = &timer_list;
 
-    if (timer->waiting)
+    if (!timer || timer->waiting)
         return -1;
 
     list_for_each_entry(tmp, &timer_list, list) {
@@ -57,7 +54,7 @@ int timer_add(utimer_t *timer)
 
 void timer_cancel(utimer_t *timer)
 {
-    if (!timer->waiting)
+    if (!timer || !timer->waiting)
         return;
 
     list_del(&timer->list);
@@ -69,6 +66,8 @@ int timer_set(utimer_t *timer, int msecs)
 {
     struct timeval *time = &timer->time;
 
+    if(!timer)
+        return -1;
     if (timer->waiting)
         timer_cancel(timer);
 
@@ -89,7 +88,7 @@ int timer_remaining(utimer_t *timer)
 {
     struct timeval now;
 
-    if (!timer->waiting)
+    if (!timer || !timer->waiting)
         return -1;
 
     get_time(&now);
@@ -147,16 +146,17 @@ void task_add(task_queue_t *q, task_t *task)
         return;
 
     task_t *tmp;
-    struct list_head *h = &proc_list;
+    struct list_head *h = &q->head;
 
     pthread_mutex_lock(&q->mutex);
-    list_for_each_entry(tmp, &proc_list, list) {
+    list_for_each_entry(tmp, &q->head, list) {
         if (tmp->pid > task->pid) {
             h = &tmp->list;
             break;
         }
     }
     list_add_tail(&task->list, h);
+    q->running_tasks++;
     pthread_mutex_unlock(&q->mutex);
 }
 
@@ -165,11 +165,12 @@ void task_delete(task_queue_t *q, task_t *task)
     if(!q || !task)
         return;
 
-    pthread_mutex_lock(&q->mutex);
     if(task->running)
         return;
+    pthread_mutex_lock(&q->mutex);
     list_del(&task->list);
     task->running = false;
+    q->running_tasks--;
     pthread_mutex_unlock(&q->mutex);
 }
 
@@ -177,10 +178,76 @@ static void clear_all_tasks(task_queue_t *q)
 {
     task_t *p, *tmp;
 
-    list_for_each_entry_safe(p, tmp, &proc_list, list)
+    list_for_each_entry_safe(p, tmp, &q->head, list)
         task_delete(q, p);
 }
 
+static void _task_run_timeout(utimer_t *timer)
+{
+    task_t *task = list_entry(timer, task_t, utimer_t);
+    timer_cancel(timer);
+    if(task->handler.kill)
+        task->handler.kill(task->queue, task);
+    task->running = false;
+    task->queue->running_tasks--;
+    task_delete(task->queue, task);
+}
+
+static void _task_timer_start(utimer_t *timer)
+{
+    task_t *task = list_entry(timer, task_t, utimer_t);
+    if(task->timeout > 0)
+    {
+        timer->handler = _task_run_timeout;
+        timer_set(timer, task->timeout);
+    }
+    else
+        timer_cancel(timer);
+    if(task->handler.run)
+    {
+        task->running = true;
+        task->handler.run(task->queue, task);
+        if(task->pid <= 0)
+        {
+            task->running = false;
+            timer_cancel(timer);
+        }
+        else
+            task_add(task->queue, task);
+    }
+}
+
+void task_register(task_queue_t *q, task_t *task)
+{
+    if(!q || !task)
+        return;
+    if(task->running)
+        return;
+    task->timer.handler = _task_timer_start;
+    task->queue = q;
+    task->pid = 0;
+    timer_add(task->timer);
+}
+
+void task_unregister(task_t *task)
+{
+    task_delete(task->queue, task);
+}
+
+void task_kill(task_t *task)
+{
+    if(!task)
+        return;
+    if(!task->running)
+        return;
+    if(task->pid > 0)
+    {
+        kill(task->pid, SIGKILL);
+        task->pid = 0;
+        task->running = false;
+        task_delete(task->queue, task);
+    }
+}
 
 static void add_signal_handler(int signum, void (*handler)(int), struct sigaction *old)
 {
@@ -233,7 +300,7 @@ static void process_task_exit(task_queue_t *q)
         if (pid <= 0)
             return;
 
-        list_for_each_entry_safe(p, tmp, &proc_list, list) {
+        list_for_each_entry_safe(p, tmp, &q->head, list) {
             if (p->pid < pid)
                 continue;
 
@@ -241,7 +308,8 @@ static void process_task_exit(task_queue_t *q)
                 break;
 
             task_delete(q, p);
-            p->handler.complete(q, p);
+            if(p->handler.complete)
+                p->handler.complete(q, p);
         }
     }
 
@@ -284,6 +352,8 @@ int ufd_add(ufd_t *sock, unsigned int events)
     unsigned int fl;
     int ret;
 
+    if(!sock)
+        return -1;
     if (!sock->registered) {
         fl = fcntl(sock->fd, F_GETFL, 0);
         fl |= O_NONBLOCK;
@@ -305,6 +375,8 @@ int ufd_delete(ufd_t *fd)
 {
     int i;
 
+    if(!fd)
+        return -1;
     for (i = 0; i < cur_nfds; i++) {
         if (cur_fds[cur_fd + i].fd != fd)
             continue;
@@ -387,18 +459,27 @@ static void process_events()
     }
 }
 
-void task_queue_init(task_queue_t *q)
+static void task_queue_init(task_queue_t *q)
 {
     if(!q)
         return;
-    q->head = proc_list;
+    LIST_HEAD_INIT(q->head);
     q->running_tasks = 0;
     q->stopped = false;
     pthread_mutex_init(&q->mutex ,NULL);
 }
 
-int task_queue_loop(task_queue_t *q)
+void tasks_init(task_queue_t *q)
 {
+    init_poll();
+    init_signals();
+    task_queue_init(q);
+}
+
+void tasks_loop(task_queue_t *q)
+{
+    if(!q)
+        return;
     task_cancelled = false;
     while (!task_cancelled)
     {

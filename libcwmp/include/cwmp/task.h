@@ -57,7 +57,8 @@ struct u_task{
     pid_t pid;
     int timeout;
     bool running;
-    utimer_t *timer;
+    utimer_t timer;
+    task_queue_t *queue;
     struct task_handler handler;
 };
 
@@ -76,12 +77,14 @@ int timer_add(utimer_t *timer);
 void timer_cancel(utimer_t *timer);
 int timer_set(utimer_t *timer, int msecs);
 int timer_remaining(utimer_t *timer);
-void task_add(task_queue_t *q, task_t *task);
-void task_delete(task_queue_t *q, task_t *task);
 int ufd_add(ufd_t *sock, unsigned int events);
 int ufd_delete(ufd_t *fd);
-void task_queue_init(task_queue_t *q);
-int task_queue_loop(task_queue_t *q);
+void task_add(task_queue_t *q, task_t *task);
+void task_delete(task_queue_t *q, task_t *task);
+void task_register(task_queue_t *q, task_t *task);
+void task_unregister(task_t *task);
+void tasks_init(task_queue_t *q);
+void tasks_loop(task_queue_t *q);
 void tasks_done(task_queue_t *q);
 
 #endif //__TASK_H__

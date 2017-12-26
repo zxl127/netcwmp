@@ -585,6 +585,8 @@ void cwmp_agent_start_session(cwmp_t * cwmp)
     int interval = cwmp_conf_get_int("cwmp:interval");
     cwmp_log_debug("interval = %d", interval);
 //    task_register(cwmp, cwmp_task_inform, (void *)cwmp, interval, TASK_TYPE_TIME);
+    task_t inform_task;
+    inform_task.
 
     while(TRUE)
     {
@@ -592,8 +594,8 @@ void cwmp_agent_start_session(cwmp_t * cwmp)
             cwmp_agent_create_session(cwmp);
 //        cwmp_agent_run_tasks(cwmp);
 //        sleep(2);
-        task_queue_init(cwmp->tasks);
-        task_queue_loop(cwmp->tasks);
+        tasks_init(cwmp->tasks);
+        tasks_loop(cwmp->tasks);
         tasks_done(cwmp->tasks);
         cwmp_log_debug("No new request");
     }
