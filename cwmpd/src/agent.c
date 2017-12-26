@@ -578,6 +578,20 @@ void cwmp_agent_create_session(cwmp_t *cwmp)
 
 }
 
+void cwmp_task_inform_param(task_queue_t *q, task_t *t)
+{
+    FUNCTION_TRACE();
+    int interval = 0;
+    cwmp_t *cwmp = list_entry(q, cwmp_t, tasks);
+
+    interval = cwmp_conf_get_int("cwmp:interval");
+    cwmp_event_set_value(cwmp, INFORM_PERIODIC, 1, NULL, 0, 0, 0);
+//    cwmp->new_request = CWMP_YES;
+    cwmp_agent_create_session(cwmp);
+
+//    task_register(cwmp, cwmp_task_inform, NULL, interval, TASK_TYPE_TIME);
+}
+
 void cwmp_agent_start_session(cwmp_t * cwmp)
 {
     FUNCTION_TRACE();
@@ -586,12 +600,19 @@ void cwmp_agent_start_session(cwmp_t * cwmp)
     cwmp_log_debug("interval = %d", interval);
 //    task_register(cwmp, cwmp_task_inform, (void *)cwmp, interval, TASK_TYPE_TIME);
     task_t inform_task;
-    inform_task.
+    struct timeval now;
+    get_time(&now);
+    now.tv_sec += interval;
+    inform_task.handler.run = cwmp_task_inform_param;
+    inform_task.handler.kill = task_kill;
+    inform_task.timeout = 10000;
+    inform_task.timer.time = now;
+    task_register(cwmp->tasks, &inform_task);
 
     while(TRUE)
     {
-        if(cwmp->new_request == CWMP_YES)
-            cwmp_agent_create_session(cwmp);
+//        if(cwmp->new_request == CWMP_YES)
+//            cwmp_agent_create_session(cwmp);
 //        cwmp_agent_run_tasks(cwmp);
 //        sleep(2);
         tasks_init(cwmp->tasks);

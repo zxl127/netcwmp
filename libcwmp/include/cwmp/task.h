@@ -73,6 +73,7 @@ struct u_task_queue{
     pthread_mutex_t     mutex;
 };
 
+void get_time(struct timeval *tv);
 int timer_add(utimer_t *timer);
 void timer_cancel(utimer_t *timer);
 int timer_set(utimer_t *timer, int msecs);
@@ -81,6 +82,7 @@ int ufd_add(ufd_t *sock, unsigned int events);
 int ufd_delete(ufd_t *fd);
 void task_add(task_queue_t *q, task_t *task);
 void task_delete(task_queue_t *q, task_t *task);
+void task_kill(task_queue_t *q, task_t *t);
 void task_register(task_queue_t *q, task_t *task);
 void task_unregister(task_t *task);
 void tasks_init(task_queue_t *q);

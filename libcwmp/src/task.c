@@ -22,7 +22,7 @@ static int tv_diff(struct timeval *t1, struct timeval *t2)
     return (t1->tv_sec - t2->tv_sec) * 1000 + (t1->tv_usec - t2->tv_usec) / 1000;
 }
 
-static void get_time(struct timeval *tv)
+void get_time(struct timeval *tv)
 {
     struct timespec ts;
 
@@ -156,6 +156,7 @@ void task_add(task_queue_t *q, task_t *task)
         }
     }
     list_add_tail(&task->list, h);
+    task->running = true;
     q->running_tasks++;
     pthread_mutex_unlock(&q->mutex);
 }
@@ -165,14 +166,27 @@ void task_delete(task_queue_t *q, task_t *task)
     if(!q || !task)
         return;
 
-    if(task->running)
-        return;
     pthread_mutex_lock(&q->mutex);
     list_del(&task->list);
+    task->pid = 0;
     task->running = false;
     q->running_tasks--;
     pthread_mutex_unlock(&q->mutex);
 }
+
+void task_kill(task_queue_t *q, task_t *t)
+{
+    if(!q || !t)
+        return;
+    if(!t->running)
+        return;
+    if(t->pid > 0)
+    {
+        kill(t->pid, SIGKILL);
+        task_delete(q, t);
+    }
+}
+
 
 static void clear_all_tasks(task_queue_t *q)
 {
@@ -184,37 +198,31 @@ static void clear_all_tasks(task_queue_t *q)
 
 static void _task_run_timeout(utimer_t *timer)
 {
-    task_t *task = list_entry(timer, task_t, utimer_t);
-    timer_cancel(timer);
+    task_t *task = list_entry(timer, task_t, timer);
     if(task->handler.kill)
         task->handler.kill(task->queue, task);
-    task->running = false;
-    task->queue->running_tasks--;
     task_delete(task->queue, task);
 }
 
 static void _task_timer_start(utimer_t *timer)
 {
-    task_t *task = list_entry(timer, task_t, utimer_t);
-    if(task->timeout > 0)
+    task_t *task = list_entry(timer, task_t, timer);
+
+    if(task->handler.run && task->queue->running_tasks < task->queue->max_running_tasks)
     {
-        timer->handler = _task_run_timeout;
-        timer_set(timer, task->timeout);
+        task->handler.run(task->queue, task);
+        if(task->pid > 0)
+        {
+            task_add(task->queue, task);
+            if(task->timeout > 0)
+            {
+                timer->handler = _task_run_timeout;
+                timer_set(timer, task->timeout);
+            }
+        }
     }
     else
-        timer_cancel(timer);
-    if(task->handler.run)
-    {
-        task->running = true;
-        task->handler.run(task->queue, task);
-        if(task->pid <= 0)
-        {
-            task->running = false;
-            timer_cancel(timer);
-        }
-        else
-            task_add(task->queue, task);
-    }
+        timer_add(&task->timer);
 }
 
 void task_register(task_queue_t *q, task_t *task)
@@ -226,27 +234,15 @@ void task_register(task_queue_t *q, task_t *task)
     task->timer.handler = _task_timer_start;
     task->queue = q;
     task->pid = 0;
-    timer_add(task->timer);
+    timer_add(&task->timer);
 }
 
 void task_unregister(task_t *task)
 {
-    task_delete(task->queue, task);
-}
-
-void task_kill(task_t *task)
-{
-    if(!task)
-        return;
-    if(!task->running)
-        return;
-    if(task->pid > 0)
-    {
-        kill(task->pid, SIGKILL);
-        task->pid = 0;
-        task->running = false;
-        task_delete(task->queue, task);
-    }
+    if(task->running)
+        task_kill(task->queue, task);
+    else
+        timer_cancel(&task->timer);
 }
 
 static void add_signal_handler(int signum, void (*handler)(int), struct sigaction *old)
@@ -463,8 +459,11 @@ static void task_queue_init(task_queue_t *q)
 {
     if(!q)
         return;
-    LIST_HEAD_INIT(q->head);
+//    q->head = LIST_HEAD_INIT(q->head);
+    q->head.next = &q->head;
+    q->head.prev = &q->head;
     q->running_tasks = 0;
+    q->max_running_tasks = 3;
     q->stopped = false;
     pthread_mutex_init(&q->mutex ,NULL);
 }
