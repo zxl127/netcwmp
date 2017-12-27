@@ -66,23 +66,18 @@ struct u_task_queue{
     struct list_head head;
 
     bool stopped;
-    int max_tasks;
     int running_tasks;
     int max_running_tasks;
 
     pthread_mutex_t     mutex;
 };
 
-void get_time(struct timeval *tv);
-int timer_add(utimer_t *timer);
-void timer_cancel(utimer_t *timer);
-int timer_set(utimer_t *timer, int msecs);
-int timer_remaining(utimer_t *timer);
+int task_timer_remaining(utimer_t *timer);
 int ufd_add(ufd_t *sock, unsigned int events);
 int ufd_delete(ufd_t *fd);
-void task_add(task_queue_t *q, task_t *task);
-void task_delete(task_queue_t *q, task_t *task);
 void task_kill(task_queue_t *q, task_t *t);
+void task_set_timer(task_t *task, int time, int timeout);
+void task_set_handler(task_t *task, void *run, void *kill, void *complete);
 void task_register(task_queue_t *q, task_t *task);
 void task_unregister(task_t *task);
 void tasks_init(task_queue_t *q);

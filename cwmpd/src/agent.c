@@ -581,15 +581,32 @@ void cwmp_agent_create_session(cwmp_t *cwmp)
 void cwmp_task_inform_param(task_queue_t *q, task_t *t)
 {
     FUNCTION_TRACE();
+    cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
+
+    pid_t pid = fork();
+    if(pid < 0)
+        return;
+    if(pid) {
+        t->pid = pid;
+        return;
+    }
+    cwmp_agent_create_session(cwmp);
+//    execlp("gedit", "gedit", NULL);
+    exit(EXIT_SUCCESS);
+}
+
+void cwmp_task_inform_complete(task_queue_t *q, task_t *t)
+{
     int interval = 0;
-    cwmp_t *cwmp = list_entry(q, cwmp_t, tasks);
+    cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
 
     interval = cwmp_conf_get_int("cwmp:interval");
     cwmp_event_set_value(cwmp, INFORM_PERIODIC, 1, NULL, 0, 0, 0);
-//    cwmp->new_request = CWMP_YES;
-    cwmp_agent_create_session(cwmp);
+    task_set_timer(t, interval * 1000, 10000);
+    task_register(q, t);
 
-//    task_register(cwmp, cwmp_task_inform, NULL, interval, TASK_TYPE_TIME);
+//    pool_pfree(cwmp->pool, t);
+    printf("task complete\n");
 }
 
 void cwmp_agent_start_session(cwmp_t * cwmp)
@@ -598,28 +615,16 @@ void cwmp_agent_start_session(cwmp_t * cwmp)
 
     int interval = cwmp_conf_get_int("cwmp:interval");
     cwmp_log_debug("interval = %d", interval);
-//    task_register(cwmp, cwmp_task_inform, (void *)cwmp, interval, TASK_TYPE_TIME);
-    task_t inform_task;
-    struct timeval now;
-    get_time(&now);
-    now.tv_sec += interval;
-    inform_task.handler.run = cwmp_task_inform_param;
-    inform_task.handler.kill = task_kill;
-    inform_task.timeout = 10000;
-    inform_task.timer.time = now;
-    task_register(cwmp->tasks, &inform_task);
+    task_t *task_inform = pool_palloc(cwmp->pool, sizeof(task_t));
+    task_set_timer(task_inform, interval * 1000, 10000);
+    task_set_handler(task_inform, cwmp_task_inform_param, task_kill, cwmp_task_inform_complete);
+    task_register(&cwmp->tasks, task_inform);
+    cwmp_agent_create_session(cwmp);
 
-    while(TRUE)
-    {
-//        if(cwmp->new_request == CWMP_YES)
-//            cwmp_agent_create_session(cwmp);
-//        cwmp_agent_run_tasks(cwmp);
-//        sleep(2);
-        tasks_init(cwmp->tasks);
-        tasks_loop(cwmp->tasks);
-        tasks_done(cwmp->tasks);
-        cwmp_log_debug("No new request");
-    }
+
+    tasks_init(&cwmp->tasks);
+    tasks_loop(&cwmp->tasks);
+    tasks_done(&cwmp->tasks);
 }
 
 

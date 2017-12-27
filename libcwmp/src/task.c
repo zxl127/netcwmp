@@ -22,7 +22,7 @@ static int tv_diff(struct timeval *t1, struct timeval *t2)
     return (t1->tv_sec - t2->tv_sec) * 1000 + (t1->tv_usec - t2->tv_usec) / 1000;
 }
 
-void get_time(struct timeval *tv)
+static void get_time(struct timeval *tv)
 {
     struct timespec ts;
 
@@ -31,7 +31,7 @@ void get_time(struct timeval *tv)
     tv->tv_usec = ts.tv_nsec / 1000;
 }
 
-int timer_add(utimer_t *timer)
+static int timer_add(utimer_t *timer)
 {
     utimer_t *tmp;
     struct list_head *h = &timer_list;
@@ -52,7 +52,7 @@ int timer_add(utimer_t *timer)
     return 0;
 }
 
-void timer_cancel(utimer_t *timer)
+static void timer_cancel(utimer_t *timer)
 {
     if (!timer || !timer->waiting)
         return;
@@ -61,15 +61,12 @@ void timer_cancel(utimer_t *timer)
     timer->waiting = false;
 }
 
-
-int timer_set(utimer_t *timer, int msecs)
+static void timer_set(utimer_t *timer, int msecs)
 {
     struct timeval *time = &timer->time;
 
     if(!timer)
         return -1;
-    if (timer->waiting)
-        timer_cancel(timer);
 
     get_time(time);
 
@@ -80,11 +77,9 @@ int timer_set(utimer_t *timer, int msecs)
         time->tv_sec++;
         time->tv_usec -= 1000000;
     }
-
-    return timer_add(timer);
 }
 
-int timer_remaining(utimer_t *timer)
+int task_timer_remaining(utimer_t *timer)
 {
     struct timeval now;
 
@@ -103,13 +98,13 @@ static int get_rest_time_from_timer()
     int diff;
 
     if (list_empty(&timer_list))
-        return 0;
+        return 1;
 
     get_time(&tv);
     timer = list_first_entry(&timer_list, utimer_t, list);
     diff = tv_diff(&timer->time, &tv);
     if (diff < 0)
-        return 0;
+        return 1;
 
     return diff;
 }
@@ -140,7 +135,7 @@ static void process_timer()
     }
 }
 
-void task_add(task_queue_t *q, task_t *task)
+static void task_add(task_queue_t *q, task_t *task)
 {
     if(!q || !task)
         return;
@@ -161,7 +156,7 @@ void task_add(task_queue_t *q, task_t *task)
     pthread_mutex_unlock(&q->mutex);
 }
 
-void task_delete(task_queue_t *q, task_t *task)
+static void task_delete(task_queue_t *q, task_t *task)
 {
     if(!q || !task)
         return;
@@ -182,6 +177,7 @@ void task_kill(task_queue_t *q, task_t *t)
         return;
     if(t->pid > 0)
     {
+        printf("kill task, pid = %d\n", t->pid);
         kill(t->pid, SIGKILL);
         task_delete(q, t);
     }
@@ -198,19 +194,23 @@ static void clear_all_tasks(task_queue_t *q)
 
 static void _task_run_timeout(utimer_t *timer)
 {
-    task_t *task = list_entry(timer, task_t, timer);
+    task_t *task = container_of(timer, task_t, timer);
     if(task->handler.kill)
         task->handler.kill(task->queue, task);
-    task_delete(task->queue, task);
+    if(task->running)
+        task_delete(task->queue, task);
+    if(task->handler.complete)
+        task->handler.complete(task->queue, task);
 }
 
 static void _task_timer_start(utimer_t *timer)
 {
-    task_t *task = list_entry(timer, task_t, timer);
+    task_t *task = container_of(timer, task_t, timer);
 
-    if(task->handler.run && task->queue->running_tasks < task->queue->max_running_tasks)
+    if(task->queue->running_tasks < task->queue->max_running_tasks)
     {
-        task->handler.run(task->queue, task);
+        if(task->handler.run)
+            task->handler.run(task->queue, task);
         if(task->pid > 0)
         {
             task_add(task->queue, task);
@@ -218,6 +218,7 @@ static void _task_timer_start(utimer_t *timer)
             {
                 timer->handler = _task_run_timeout;
                 timer_set(timer, task->timeout);
+                timer_add(timer);
             }
         }
     }
@@ -225,24 +226,36 @@ static void _task_timer_start(utimer_t *timer)
         timer_add(&task->timer);
 }
 
+void task_set_timer(task_t *task, int time, int timeout)
+{
+    task->timer.waiting = false;
+    task->timer.handler = _task_timer_start;
+    task->timeout = timeout;
+    timer_set(&task->timer, time);
+}
+
+void task_set_handler(task_t *task, void *run, void *kill, void *complete)
+{
+    task->handler.run = run;
+    task->handler.kill = kill;
+    task->handler.complete = complete;
+}
+
 void task_register(task_queue_t *q, task_t *task)
 {
     if(!q || !task)
         return;
-    if(task->running)
+    if(task->timer.waiting)
         return;
-    task->timer.handler = _task_timer_start;
-    task->queue = q;
     task->pid = 0;
+    task->queue = q;
+    task->running = false;
     timer_add(&task->timer);
 }
 
 void task_unregister(task_t *task)
 {
-    if(task->running)
-        task_kill(task->queue, task);
-    else
-        timer_cancel(&task->timer);
+    timer_cancel(&task->timer);
 }
 
 static void add_signal_handler(int signum, void (*handler)(int), struct sigaction *old)
@@ -304,6 +317,7 @@ static void process_task_exit(task_queue_t *q)
                 break;
 
             task_delete(q, p);
+            timer_cancel(&p->timer);
             if(p->handler.complete)
                 p->handler.complete(q, p);
         }
@@ -459,7 +473,7 @@ static void task_queue_init(task_queue_t *q)
 {
     if(!q)
         return;
-//    q->head = LIST_HEAD_INIT(q->head);
+
     q->head.next = &q->head;
     q->head.prev = &q->head;
     q->running_tasks = 0;

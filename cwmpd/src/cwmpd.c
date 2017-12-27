@@ -128,7 +128,6 @@ int main(int argc, char **argv)
 	cwmp_bzero(cwmp, sizeof(cwmp_t));
 	cwmp->new_request = CWMP_TRUE;
 	cwmp->pool = pool;
-    cwmp->tasks = pool_palloc(pool, sizeof(task_queue_t));
 
     cwmp_conf_open("cwmp.conf");
     cwmp_conf_init(cwmp);
