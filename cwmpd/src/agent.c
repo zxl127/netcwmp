@@ -665,9 +665,9 @@ void cwmp_agent_session(cwmp_t * cwmp)
     char * envstr;
     char * encstr;
 
-    envstr = "SOAP-ENV"; //cwmp_conf_get("cwmp:soap_env");
-    encstr = "SOAP-ENC"; // cwmp_conf_get("cwmp:soap_enc");
-    
+    envstr = cwmp_conf_pool_get(cwmp->pool, "cwmp:soap_env");
+    encstr = cwmp_conf_pool_get(cwmp->pool, "cwmp:soap_enc");
+
     cwmp_log_debug("cwmp_agent_session start...");
 
     cwmp_set_envelope_ns(envstr, encstr);
