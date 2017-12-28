@@ -221,6 +221,11 @@ static void _task_timer_start(utimer_t *timer)
                 timer_add(timer);
             }
         }
+        else
+        {
+            if(task->handler.complete)
+                task->handler.complete(task->queue, task);
+        }
     }
     else
         timer_add(&task->timer);
