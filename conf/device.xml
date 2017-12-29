@@ -109,7 +109,7 @@
             </param> -->
             <param name="ParameterKey" activeNotify="canDeny"  version="1.0">
             </param>
-            <param name="ConnectionRequestURL" activeNotify="forceDefaultEnabled" version="1.0" forcedInform="true" get_func="cpe_get_igd_ms_connectionrequesturl">
+            <param name="ConnectionRequestURL" activeNotify="forceDefaultEnabled" version="1.0" forcedInform="true" get_func="cpe_get_ConnectionRequestURL">
             </param>
             <param name="ConnectionRequestUsername" rw="1" version="1.0" get_func="cpe_get_igd_ms_connectionrequestusername" set_func="cpe_set_igd_ms_connectionrequestusername">
             </param>

@@ -54,6 +54,7 @@ struct task_handler {
 struct u_task{
     struct list_head list;
 
+    void *arg;
     pid_t pid;
     int timeout;
     bool running;
@@ -78,7 +79,7 @@ int ufd_delete(ufd_t *fd);
 void task_kill(task_queue_t *q, task_t *t);
 void task_set_timer(task_t *task, int time, int timeout);
 void task_set_handler(task_t *task, void *run, void *kill, void *complete);
-void task_register(task_queue_t *q, task_t *task);
+void task_register(task_queue_t *q, task_t *task, void *arg);
 void task_unregister(task_t *task);
 void tasks_init(task_queue_t *q);
 void tasks_loop(task_queue_t *q);

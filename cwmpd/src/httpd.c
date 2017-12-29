@@ -106,6 +106,133 @@ int httpd_response_unkonw_error(http_socket_t * sock)
 }
 
 extern void set_connection_request_true(void);
+extern void cwmp_agent_create_session(cwmp_t *cwmp);
+
+struct http_server {
+    ufd_t ufd;
+    cwmp_t *cwmp;
+    http_socket_t *sock;
+};
+
+void task_server_run(task_queue_t *q, task_t *t)
+{
+    int rc = 1;
+    pid_t pid;
+    char * auth;
+    http_socket_t *s = t->arg;
+    http_request_t * request;
+    char cpe_user[INI_BUFFERSIZE] = {0};
+    char cpe_pwd[INI_BUFFERSIZE] = {0};
+    cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
+
+    pid = fork();
+    if(pid < 0)
+        return;
+    if(pid)
+        t->pid = pid;
+
+    http_request_create(&request, http_socket_get_pool(s));
+    rc = http_read_request(s, request, http_socket_get_pool(s));
+    if (rc <= 0)
+    {
+        rc = -1;
+        httpd_response_unkonw_error(s);
+        goto fail;
+    }
+
+    if (request->method != HTTP_GET)
+    {
+        rc = -1;
+        httpd_response_unkonw_error(s);
+        goto fail;
+    }
+
+    if (cwmp->cpe_auth)
+    {
+        auth = http_get_variable(request->parser, "Authorization");
+
+        if (!auth)
+        {
+            rc = -1;
+            httpd_response_unauthorization(s);
+            goto fail;
+        }
+
+        cwmp_conf_get("cwmp:cpe_username", cpe_user);
+        cwmp_conf_get("cwmp:cpe_password", cpe_pwd);
+
+        cwmp_log_debug("cpe username: %s, cpe password: %s\n", cpe_user, cpe_pwd);
+
+        if (http_check_digest_auth(AuthRealm, auth, cpe_user, cpe_pwd) != 0)
+        {
+            rc = -1;
+            httpd_response_unauthorization(s);
+            goto fail;
+        }
+    }
+
+    httpd_response_ok(s);
+
+    //get a new request from acs
+    cwmp->new_request = CWMP_YES;
+    cwmp_log_debug("set cwmp new request to %d\n", cwmp->new_request);
+
+    cwmp_event_set_value(cwmp, INFORM_CONNECTIONREQUEST, 1, NULL, 0, 0, 0);
+    set_connection_request_true();
+fail:
+    http_socket_destroy(s);
+    if(rc > 0)
+        cwmp_agent_create_session(cwmp);
+    exit(EXIT_SUCCESS);
+}
+
+void task_server_complete(task_queue_t *q, task_t *t)
+{
+    cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
+
+    pool_pfree(cwmp->pool, t);
+    printf("new client request complete\n");
+}
+
+void new_server_request(ufd_t *f)
+{
+    int ret;
+    task_t *task_server;
+    http_socket_t *new_sock;
+    struct http_server *server = container_of(f, struct http_server, ufd);
+
+    for(;;)
+    {
+        ret = http_socket_accept(server->sock, &new_sock);
+        if(ret < 0)
+            break;
+        task_server = pool_palloc(server->cwmp->pool, sizeof(task_t));
+        task_set_timer(task_server, 0, 20000);
+        task_set_handler(task_server, task_server_run, task_kill, task_server_complete);
+        task_register(&server->cwmp->tasks, task_server, new_sock);
+    }
+}
+
+void init_httpd_server(cwmp_t *cwmp)
+{
+    int rc;
+    http_socket_t *listen_sock;
+    struct http_server *server;
+
+    rc = http_socket_server(&listen_sock, cwmp->httpd_port, 5, -1, cwmp->pool);
+    if(rc != CWMP_OK)
+    {
+        cwmp_log_error("build httpd server faild. port: %d, %s\n", cwmp->httpd_port, strerror(errno));
+        exit(-1);
+    }
+
+    server = pool_palloc(cwmp->pool, sizeof(struct http_server));
+    server->cwmp = cwmp;
+    server->sock = listen_sock;
+    server->ufd.fd = http_socket_get_fd(listen_sock);
+    server->ufd.handler = new_server_request;
+    ufd_add(&server->ufd, EVENT_READ | EVENT_EDGE_TRIGGER);
+}
 
 int httpd_build_server(cwmp_t * cwmp)
 {

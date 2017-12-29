@@ -115,7 +115,7 @@ void cwmp_worker_thread_start(cwmp_t * cwmp)
 //    CreateThread(NULL, 0, cwmp_worker_thread_tasks, cwmp, 0, &tid2);
 #else
     pthread_t th1, th2, th3;
-    pthread_create(&th1, NULL, (void*)cwmp_worker_thread_httpd, cwmp);
+//    pthread_create(&th1, NULL, (void*)cwmp_worker_thread_httpd, cwmp);
 //    pthread_create(&th2, NULL, (void*)cwmp_worker_thread_tasks, cwmp);
 
 #endif

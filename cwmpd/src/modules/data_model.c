@@ -21,7 +21,7 @@ model_func_t ModelFunction[] =
 
     {"cpe_get_igd_ms_period_intval", cpe_get_igd_ms_period_intval},
     {"cpe_set_igd_ms_period_intval", cpe_set_igd_ms_period_intval},
-    {"cpe_get_igd_ms_connectionrequesturl", cpe_get_igd_ms_connectionrequesturl},
+    {"cpe_get_ConnectionRequestURL", cpe_get_ConnectionRequestURL},
     {"cpe_get_igd_ms_connectionrequestusername", cpe_get_igd_ms_connectionrequestusername},
     {"cpe_set_igd_ms_connectionrequestusername", cpe_set_igd_ms_connectionrequestusername},
     {"cpe_get_igd_ms_connectionrequestpassword", cpe_get_igd_ms_connectionrequestpassword},

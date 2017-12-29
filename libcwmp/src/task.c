@@ -2,7 +2,12 @@
 #include "cwmp/task.h"
 #include "cwmp/cwmp.h"
 #include <signal.h>
+#include <sys/types.h>
 #include <sys/epoll.h>
+#include <sys/wait.h>
+
+#define USE_EPOLL_PROTO
+#define USE_SELECT_PROTO
 
 #define MAX_EVENTS      10
 #define ARRAY_SIZE(arr)      (sizeof(arr) / sizeof((arr)[0]))
@@ -12,10 +17,13 @@ static struct list_head timer_list = LIST_HEAD_INIT(timer_list);
 static int task_cancelled = false;
 static int task_exit = false;
 
-static struct epoll_event events[MAX_EVENTS];
-static ufd_t cur_fds[MAX_EVENTS];
-static int cur_fd, cur_nfds;
+static ufd_t *cur_fds[MAX_EVENTS];
+
 static int poll_fd = -1;
+static int cur_fd, cur_nfds;
+static struct epoll_event events[MAX_EVENTS];
+
+fd_set read_set, write_set;
 
 static int tv_diff(struct timeval *t1, struct timeval *t2)
 {
@@ -246,7 +254,7 @@ void task_set_handler(task_t *task, void *run, void *kill, void *complete)
     task->handler.complete = complete;
 }
 
-void task_register(task_queue_t *q, task_t *task)
+void task_register(task_queue_t *q, task_t *task, void *arg)
 {
     if(!q || !task)
         return;
@@ -254,6 +262,7 @@ void task_register(task_queue_t *q, task_t *task)
         return;
     task->pid = 0;
     task->queue = q;
+    task->arg = arg;
     task->running = false;
     timer_add(&task->timer);
 }
@@ -331,6 +340,7 @@ static void process_task_exit(task_queue_t *q)
 
 }
 
+#ifdef USE_EPOLL_PROTO
 static int init_poll()
 {
     poll_fd = epoll_create(MAX_EVENTS);
@@ -393,15 +403,14 @@ int ufd_delete(ufd_t *fd)
 
     if(!fd)
         return -1;
+    if(!fd->registered)
+        return -1;
     for (i = 0; i < cur_nfds; i++) {
-        if (cur_fds[cur_fd + i].fd != fd)
+        if (cur_fds[i] != fd)
             continue;
 
-        cur_fds[cur_fd + i].fd = NULL;
+        cur_fds[i] = NULL;
     }
-
-    if (!fd->registered)
-        return 0;
 
     fd->registered = false;
     fd->events = 0;
@@ -414,16 +423,123 @@ static int fetch_events()
 
     nfds = epoll_wait(poll_fd, events, ARRAY_SIZE(events), get_rest_time_from_timer());
     for (n = 0; n < nfds; ++n) {
-        ufd_t *cur = &cur_fds[n];
+        ufd_t *cur = cur_fds[n];
         ufd_t *u = events[n].data.ptr;
         unsigned int ev = 0;
 
+        cur = u;
         if (!u)
             continue;
 
         if (events[n].events & (EPOLLERR|EPOLLHUP)) {
             u->error = true;
-            (u);
+            ufd_delete(u);
+        }
+
+        if(!(events[n].events & (EPOLLRDHUP|EPOLLIN|EPOLLOUT|EPOLLERR|EPOLLHUP))) {
+            cur->fd = NULL;
+            continue;
+        }
+
+        if(events[n].events & EPOLLRDHUP)
+            u->eof = true;
+
+        if(events[n].events & EPOLLIN)
+            ev |= EVENT_READ;
+
+        if(events[n].events & EPOLLOUT)
+            ev |= EVENT_WRITE;
+
+        cur->events = ev;
+    }
+
+    return nfds;
+}
+#endif
+
+#ifdef USE_SELECT_PROTO
+static int init_poll()
+{
+    FD_ZERO(&read_set);
+    FD_ZERO(&write_set);
+}
+
+static int register_poll(ufd_t *fd, unsigned int events)
+{
+    if (events & EVENT_READ)
+        FD_SET(fd->fd, &read_set);
+
+    if (events & EVENT_WRITE)
+        FD_SET(fd->fd, &write_set);
+
+    fd->events = events;
+
+    return 0;
+}
+
+int ufd_add(ufd_t *sock, unsigned int events)
+{
+    unsigned int fl;
+    int ret;
+
+    if(!sock)
+        return -1;
+    if (!sock->registered) {
+        fl = fcntl(sock->fd, F_GETFL, 0);
+        fl |= O_NONBLOCK;
+        fcntl(sock->fd, F_SETFL, fl);
+    }
+
+    ret = register_poll(sock, events);
+    if (ret < 0)
+        goto out;
+
+    sock->registered = true;
+    sock->eof = false;
+
+out:
+    return ret;
+}
+
+int ufd_delete(ufd_t *fd)
+{
+    int i;
+
+    if(!fd)
+        return -1;
+    if (!fd->registered)
+        return -1;
+
+    for (i = 0; i < cur_nfds; i++) {
+        if (cur_fds[i] != fd)
+            continue;
+
+        cur_fds[i] = NULL;
+    }
+
+
+    fd->registered = false;
+    fd->events = 0;
+    FD_CLR(fd->fd, &i)
+}
+
+static int fetch_events()
+{
+    int n, nfds;
+
+    nfds = select();
+    for (n = 0; n < nfds; ++n) {
+        ufd_t *cur = cur_fds[n];
+        ufd_t *u = events[n].data.ptr;
+        unsigned int ev = 0;
+
+        cur = u;
+        if (!u)
+            continue;
+
+        if (events[n].events & (EPOLLERR|EPOLLHUP)) {
+            u->error = true;
+            ufd_delete(u);
         }
 
         if(!(events[n].events & (EPOLLRDHUP|EPOLLIN|EPOLLOUT|EPOLLERR|EPOLLHUP))) {
@@ -446,6 +562,8 @@ static int fetch_events()
     return nfds;
 }
 
+#endif
+
 static void process_events()
 {
     ufd_t *fd;
@@ -458,12 +576,9 @@ static void process_events()
     }
 
     while (cur_nfds > 0) {
-        unsigned int events;
-
-        fd = &cur_fds[cur_fd++];
+        fd = cur_fds[cur_fd++];
         cur_nfds--;
 
-        events = fd->events;
         if (!fd)
             continue;
 
@@ -480,8 +595,7 @@ static void task_queue_init(task_queue_t *q)
     if(!q)
         return;
 
-    q->head.next = &q->head;
-    q->head.prev = &q->head;
+    INIT_LIST_HEAD(&q->head);
     q->running_tasks = 0;
     q->max_running_tasks = 3;
     q->stopped = false;

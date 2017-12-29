@@ -31,6 +31,7 @@
 
 
 int httpd_build_server(cwmp_t * cwmp);
+void init_httpd_server(cwmp_t *cwmp);
 
 
 #endif
