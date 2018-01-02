@@ -20,7 +20,7 @@ static int task_exit = false;
 static ufd_t *cur_fds[MAX_EVENTS];
 
 static int poll_fd = -1;
-static int cur_fd, cur_nfds;
+static int cur_fd, cur_nfds, max_fd;
 static struct epoll_event events[MAX_EVENTS];
 
 fd_set read_set, write_set;
@@ -462,10 +462,37 @@ static int init_poll()
 {
     FD_ZERO(&read_set);
     FD_ZERO(&write_set);
+    max_fd = 0;
+    memset(cur_fds, 0, sizeof(cur_fds));
 }
 
 static int register_poll(ufd_t *fd, unsigned int events)
 {
+    int i = 0, n = 0;
+    ufd_t **pfd = NULL;
+
+    if(cur_nfds == MAX_EVENTS)
+        return -1;
+
+    for(i = 0; i < cur_nfds; i++)
+    {
+        if(cur_fds[i] != NULL && fd->fd <= cur_fds[i]->fd)
+            n = -1;
+        if(cur_fds[i] == NULL)
+            pfd = &cur_fds[i];
+    }
+    if(cur_nfds == 0)
+    {
+        cur_fds[0] = fd;
+        max_fd = fd->fd;
+    }
+    else
+    {
+        *pfd = fd;
+        if(n == 0)
+            max_fd = fd->fd;
+    }
+    cur_nfds++;
     if (events & EVENT_READ)
         FD_SET(fd->fd, &read_set);
 
@@ -515,12 +542,13 @@ int ufd_delete(ufd_t *fd)
             continue;
 
         cur_fds[i] = NULL;
+        cur_nfds--;
     }
-
 
     fd->registered = false;
     fd->events = 0;
-    FD_CLR(fd->fd, &i)
+    FD_CLR(fd->fd, &read_set);
+    FD_CLR(fd->fd, &write_set);
 }
 
 static int fetch_events()
