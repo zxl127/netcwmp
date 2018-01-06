@@ -74,7 +74,7 @@ struct u_task_queue{
 };
 
 int task_timer_remaining(utimer_t *timer);
-int ufd_add(ufd_t *sock, unsigned int events);
+int ufd_add(ufd_t *fd, unsigned int events);
 int ufd_delete(ufd_t *fd);
 void task_kill(task_queue_t *q, task_t *t);
 void task_set_timer(task_t *task, int time, int timeout);

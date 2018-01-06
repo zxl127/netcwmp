@@ -6,7 +6,7 @@
 #include <sys/epoll.h>
 #include <sys/wait.h>
 
-#define USE_EPOLL_PROTO
+//#define USE_EPOLL_PROTO
 #define USE_SELECT_PROTO
 
 #define MAX_EVENTS      10
@@ -18,12 +18,18 @@ static int task_cancelled = false;
 static int task_exit = false;
 
 static ufd_t *cur_fds[MAX_EVENTS];
+static int cur_fd, cur_nfds;
 
+#ifdef USE_EPOLL_PROTO
 static int poll_fd = -1;
-static int cur_fd, cur_nfds, max_fd;
 static struct epoll_event events[MAX_EVENTS];
+#endif
 
-fd_set read_set, write_set;
+#ifdef USE_SELECT_PROTO
+static int max_fd;
+static ufd_t *sel_fds[MAX_EVENTS];
+fd_set read_set, write_set, except_set;
+#endif
 
 static int tv_diff(struct timeval *t1, struct timeval *t2)
 {
@@ -373,25 +379,26 @@ static int register_poll(ufd_t *fd, unsigned int events)
 }
 
 
-int ufd_add(ufd_t *sock, unsigned int events)
+int ufd_add(ufd_t *fd, unsigned int events)
 {
     unsigned int fl;
     int ret;
 
-    if(!sock)
+    if(!fd)
         return -1;
-    if (!sock->registered) {
-        fl = fcntl(sock->fd, F_GETFL, 0);
+    if (!fd->registered) {
+        fl = fcntl(fd->fd, F_GETFL, 0);
         fl |= O_NONBLOCK;
-        fcntl(sock->fd, F_SETFL, fl);
+        fcntl(fd->fd, F_SETFL, fl);
     }
 
-    ret = register_poll(sock, events);
+    ret = register_poll(fd, events);
     if (ret < 0)
         goto out;
 
-    sock->registered = true;
-    sock->eof = false;
+    fd->registered = true;
+    fd->eof = false;
+    fd->error = false;
 
 out:
     return ret;
@@ -406,51 +413,46 @@ int ufd_delete(ufd_t *fd)
     if(!fd->registered)
         return -1;
     for (i = 0; i < cur_nfds; i++) {
-        if (cur_fds[i] != fd)
-            continue;
-
-        cur_fds[i] = NULL;
+        if (cur_fds[i] == fd)
+            cur_fds[i] = NULL;
     }
 
     fd->registered = false;
     fd->events = 0;
+    fd->eof = false;
+    fd->error = false;
+
     return epoll_ctl(poll_fd, EPOLL_CTL_DEL, fd->fd, 0);
 }
 
 static int fetch_events()
 {
     int n, nfds;
+    ufd_t *cur;
 
     nfds = epoll_wait(poll_fd, events, ARRAY_SIZE(events), get_rest_time_from_timer());
     for (n = 0; n < nfds; ++n) {
-        ufd_t *cur = cur_fds[n];
-        ufd_t *u = events[n].data.ptr;
-        unsigned int ev = 0;
+        cur = cur_fds[n];
+        cur = events[n].data.ptr;
 
-        cur = u;
-        if (!u)
+        if (!cur)
             continue;
 
-        if (events[n].events & (EPOLLERR|EPOLLHUP)) {
-            u->error = true;
-            ufd_delete(u);
-        }
-
-        if(!(events[n].events & (EPOLLRDHUP|EPOLLIN|EPOLLOUT|EPOLLERR|EPOLLHUP))) {
-            cur->fd = NULL;
+        cur->events = 0;
+        if(!(events[n].events & (EPOLLRDHUP|EPOLLIN|EPOLLOUT|EPOLLERR|EPOLLHUP)))
             continue;
-        }
+
+        if(events[n].events & (EPOLLERR|EPOLLHUP))
+            cur->error = true;
 
         if(events[n].events & EPOLLRDHUP)
-            u->eof = true;
+            cur->eof = true;
 
         if(events[n].events & EPOLLIN)
-            ev |= EVENT_READ;
+            cur->events |= EVENT_READ;
 
         if(events[n].events & EPOLLOUT)
-            ev |= EVENT_WRITE;
-
-        cur->events = ev;
+            cur->events |= EVENT_WRITE;
     }
 
     return nfds;
@@ -462,67 +464,56 @@ static int init_poll()
 {
     FD_ZERO(&read_set);
     FD_ZERO(&write_set);
-    max_fd = 0;
-    memset(cur_fds, 0, sizeof(cur_fds));
+    FD_ZERO(&except_set);
 }
 
 static int register_poll(ufd_t *fd, unsigned int events)
 {
-    int i = 0, n = 0;
-    ufd_t **pfd = NULL;
+    int i = 0;
 
-    if(cur_nfds == MAX_EVENTS)
+    for(i = 0; i < MAX_EVENTS; i++)
+    {
+        if(sel_fds[i] == NULL)
+        {
+            sel_fds[i] = fd;
+            break;
+        }
+    }
+    if(i == MAX_EVENTS)
         return -1;
-
-    for(i = 0; i < cur_nfds; i++)
-    {
-        if(cur_fds[i] != NULL && fd->fd <= cur_fds[i]->fd)
-            n = -1;
-        if(cur_fds[i] == NULL)
-            pfd = &cur_fds[i];
-    }
-    if(cur_nfds == 0)
-    {
-        cur_fds[0] = fd;
+    if(fd->fd > max_fd)
         max_fd = fd->fd;
-    }
-    else
-    {
-        *pfd = fd;
-        if(n == 0)
-            max_fd = fd->fd;
-    }
-    cur_nfds++;
+
     if (events & EVENT_READ)
         FD_SET(fd->fd, &read_set);
-
     if (events & EVENT_WRITE)
         FD_SET(fd->fd, &write_set);
+    FD_SET(fd->fd, &except_set);
 
     fd->events = events;
 
     return 0;
 }
 
-int ufd_add(ufd_t *sock, unsigned int events)
+int ufd_add(ufd_t *fd, unsigned int events)
 {
     unsigned int fl;
     int ret;
 
-    if(!sock)
+    if(!fd || fd->registered)
         return -1;
-    if (!sock->registered) {
-        fl = fcntl(sock->fd, F_GETFL, 0);
-        fl |= O_NONBLOCK;
-        fcntl(sock->fd, F_SETFL, fl);
-    }
 
-    ret = register_poll(sock, events);
+    fl = fcntl(fd->fd, F_GETFL, 0);
+    fl |= O_NONBLOCK;
+    fcntl(fd->fd, F_SETFL, fl);
+
+    ret = register_poll(fd, events);
     if (ret < 0)
         goto out;
 
-    sock->registered = true;
-    sock->eof = false;
+    fd->registered = true;
+    fd->eof = false;
+    fd->error = false;
 
 out:
     return ret;
@@ -530,62 +521,75 @@ out:
 
 int ufd_delete(ufd_t *fd)
 {
-    int i;
+    bool bfind = false;
+    int i, max = 0;
 
-    if(!fd)
+    if(!fd || !fd->registered)
         return -1;
-    if (!fd->registered)
-        return -1;
 
-    for (i = 0; i < cur_nfds; i++) {
-        if (cur_fds[i] != fd)
-            continue;
-
-        cur_fds[i] = NULL;
-        cur_nfds--;
+    for (i = 0; i < MAX_EVENTS; i++) {
+        if(sel_fds[i] == NULL)
+            break;
+        if (sel_fds[i] == fd)
+            bfind = true;
+        if(bfind) {
+            if(i == MAX_EVENTS - 1)
+                sel_fds[i] = NULL;
+            else
+                sel_fds[i] = sel_fds[i + 1];
+        }
+        if(max < sel_fds[i]->fd)
+            max = sel_fds[i]->fd;
     }
+    max_fd = max;
 
     fd->registered = false;
     fd->events = 0;
+    fd->eof = false;
+    fd->error = false;
     FD_CLR(fd->fd, &read_set);
     FD_CLR(fd->fd, &write_set);
+    FD_CLR(fd->fd, &except_set);
 }
 
 static int fetch_events()
 {
-    int n, nfds;
+    int n, m;
+    int nfds, msec;
+    fd_set read, write, except;
+    struct timeval tv;
+    ufd_t *cur, *u;
 
-    nfds = select();
-    for (n = 0; n < nfds; ++n) {
-        ufd_t *cur = cur_fds[n];
-        ufd_t *u = events[n].data.ptr;
-        unsigned int ev = 0;
+    read = read_set;
+    write = write_set;
+    except = except_set;
 
-        cur = u;
+    msec = get_rest_time_from_timer();
+    tv.tv_sec = msec / 1000;
+    tv.tv_usec = msec % 1000 * 1000;
+
+    nfds = select(max_fd + 1, &read, &write, &except, &tv);
+    for (n = 0, m = 0; n < MAX_EVENTS; ++n) {
+        cur = cur_fds[m];
+        u = sel_fds[n];
+
         if (!u)
-            continue;
+            break;;
 
-        if (events[n].events & (EPOLLERR|EPOLLHUP)) {
+        u->events = 0;
+        if(FD_ISSET(u->fd, &read))
+            u->events |= EVENT_READ;
+        if(FD_ISSET(u->fd, &write))
+            u->events |= EVENT_READ;
+        if(FD_ISSET(u->fd, &except))
             u->error = true;
-            ufd_delete(u);
+        if(u->events || u->error) {
+            cur = u;
+            m++;
         }
-
-        if(!(events[n].events & (EPOLLRDHUP|EPOLLIN|EPOLLOUT|EPOLLERR|EPOLLHUP))) {
-            cur->fd = NULL;
-            continue;
-        }
-
-        if(events[n].events & EPOLLRDHUP)
-            u->eof = true;
-
-        if(events[n].events & EPOLLIN)
-            ev |= EVENT_READ;
-
-        if(events[n].events & EPOLLOUT)
-            ev |= EVENT_WRITE;
-
-        cur->events = ev;
     }
+    if(m < nfds)
+        nfds = m;
 
     return nfds;
 }
@@ -658,10 +662,12 @@ void tasks_loop(task_queue_t *q)
 
 void tasks_done(task_queue_t *q)
 {
+#ifdef USE_EPOLL_PROTO
 	if (poll_fd >= 0) {
 		close(poll_fd);
 		poll_fd = -1;
 	}
+#endif
 
     clear_all_timer();
     clear_all_tasks(q);
