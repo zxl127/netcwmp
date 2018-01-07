@@ -432,8 +432,8 @@ static int fetch_events()
 
     nfds = epoll_wait(poll_fd, events, ARRAY_SIZE(events), get_rest_time_from_timer());
     for (n = 0; n < nfds; ++n) {
-        cur = cur_fds[n];
         cur = events[n].data.ptr;
+        cur_fds[n] = cur;
 
         if (!cur)
             continue;
@@ -558,7 +558,7 @@ static int fetch_events()
     int nfds, msec;
     fd_set read, write, except;
     struct timeval tv;
-    ufd_t *cur, *u;
+    ufd_t *u;
 
     read = read_set;
     write = write_set;
@@ -570,7 +570,6 @@ static int fetch_events()
 
     nfds = select(max_fd + 1, &read, &write, &except, &tv);
     for (n = 0, m = 0; n < MAX_EVENTS; ++n) {
-        cur = cur_fds[m];
         u = sel_fds[n];
 
         if (!u)
@@ -584,7 +583,7 @@ static int fetch_events()
         if(FD_ISSET(u->fd, &except))
             u->error = true;
         if(u->events || u->error) {
-            cur = u;
+            cur_fds[m] = u;
             m++;
         }
     }
