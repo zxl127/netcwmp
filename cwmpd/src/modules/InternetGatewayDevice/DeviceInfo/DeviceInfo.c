@@ -114,7 +114,7 @@ int cpe_set_igd_ms_period_intval(cwmp_t *cwmp, const char *name, const char *val
 
 int cpe_get_ConnectionRequestURL(cwmp_t * cwmp, const char * name, char ** value, pool_t * pool)
 {
-    sprintf(param, "%s:%d", cwmp->cpe_httpd_ip, cwmp->httpd_port);
+    sprintf(param, "http://%s:%d", cwmp->cpe_httpd_ip, cwmp->httpd_port);
     *value = param;
 
     return FAULT_CODE_OK;
@@ -174,8 +174,8 @@ int  cpe_refresh_igd_wanipconnection(cwmp_t * cwmp, parameter_node_t * param_nod
 
 int cpe_get_igd_wan_ip_ExternalIPAddress(cwmp_t * cwmp, const char * name, char ** value, pool_t * pool)
 {
-    strcpy(param, "192.168.2.142");
-	*value = param;
+    sprintf(param, "%s", cwmp->cpe_httpd_ip);
+    *value = param;
 
     return FAULT_CODE_OK;
 }
