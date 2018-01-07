@@ -114,7 +114,7 @@ struct http_server {
     http_socket_t *sock;
 };
 
-void task_server_run(task_queue_t *q, task_t *t)
+void task_server_run(utask_queue_t *q, utask_t *t)
 {
     int rc = 1;
     pid_t pid;
@@ -186,7 +186,7 @@ fail:
     exit(EXIT_SUCCESS);
 }
 
-void task_server_complete(task_queue_t *q, task_t *t)
+void task_server_complete(utask_queue_t *q, utask_t *t)
 {
     cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
 
@@ -197,7 +197,7 @@ void task_server_complete(task_queue_t *q, task_t *t)
 void new_server_request(ufd_t *f)
 {
     int ret;
-    task_t *task_server;
+    utask_t *task_server;
     http_socket_t *new_sock;
     struct http_server *server = container_of(f, struct http_server, ufd);
 
@@ -206,10 +206,10 @@ void new_server_request(ufd_t *f)
         ret = http_socket_accept(server->sock, &new_sock);
         if(ret < 0)
             break;
-        task_server = pool_palloc(server->cwmp->pool, sizeof(task_t));
-        task_set_timer(task_server, 0, 20000);
-        task_set_handler(task_server, task_server_run, task_kill, task_server_complete);
-        task_register(&server->cwmp->tasks, task_server, new_sock);
+        task_server = pool_palloc(server->cwmp->pool, sizeof(utask_t));
+        utask_set_timer(task_server, 0, 20000);
+        utask_set_handler(task_server, task_server_run, utask_kill, task_server_complete);
+        utask_register(&server->cwmp->tasks, task_server, new_sock);
     }
 }
 

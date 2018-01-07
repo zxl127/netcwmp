@@ -14,12 +14,12 @@
 #define __CWMP_H__
 
 #include <cwmp/xmlet.h>
-//#include <cwmp/types.h>
+#include <cwmp/types.h>
 #include <cwmp/util.h>
 #include <cwmp/memory.h>
 #include <cwmp/buffer.h>
 #include <cwmp/event.h>
-#include <cwmp/task.h>
+#include <utask.h>
 
 
 #define ASSERT assert
@@ -300,7 +300,7 @@ struct cwmp_st
 
 	transfer_t    transfer_info;      //����Download��Upload
 
-    task_queue_t tasks;
+    utask_queue_t tasks;
 
 	pool_t * pool;
 	parameter_node_t * root;

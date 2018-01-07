@@ -107,7 +107,6 @@ void cwmp_task_download_file(void *arg1, void *arg2)
     FUNCTION_TRACE();
     int faultcode = 0;
     cwmp_t *cwmp = (cwmp_t *)arg1;
-    task_t *task = (task_t *)arg2;
     download_arg_t * dlarg;// = (download_arg_t*)task->arg;
 
     cwmp_log_info("cwmp_agent_download_file url[%s] usr[%s] pwd[%s] type[%s] fsize[%d]\r\n",
@@ -137,7 +136,6 @@ void cwmp_task_upload_file(void *arg1, void *arg2)
     FUNCTION_TRACE();
     int faultcode = 0;
     cwmp_t *cwmp = (cwmp_t *)arg1;
-    task_t *task = (task_t *)arg2;
     upload_arg_t * ularg;// = (upload_arg_t*)task->arg;
 
     time_t starttime = time(NULL);
@@ -155,7 +153,6 @@ void cwmp_task_reboot(void *arg1, void *arg2)
 {
     FUNCTION_TRACE();
     cwmp_t *cwmp = (cwmp_t *)arg1;
-    task_t *task = (task_t *)arg2;
 
     cwmp_event_set_value(cwmp, INFORM_MREBOOT, 1, NULL, 0, 0, 0);
     cwmp_event_clear_active(cwmp);
@@ -170,7 +167,6 @@ void cwmp_task_factoryreset(void *arg1, void *arg2)
 {
     FUNCTION_TRACE();
     cwmp_t *cwmp = (cwmp_t *)arg1;
-    task_t *task = (task_t *)arg2;
 
     remove(TR069_BOOTSTRAP_FLAG);
     remove(TR069_REBOOT_FLAG);

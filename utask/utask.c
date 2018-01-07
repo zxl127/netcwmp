@@ -1,16 +1,24 @@
-#include "cwmp/log.h"
-#include "cwmp/task.h"
-#include "cwmp/cwmp.h"
+#include "utask.h"
+#include <stdio.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/epoll.h>
 #include <sys/wait.h>
 
-//#define USE_EPOLL_PROTO
-#define USE_SELECT_PROTO
+#define USE_EPOLL_PROTO
+//#define USE_SELECT_PROTO
 
-#define MAX_EVENTS      10
-#define ARRAY_SIZE(arr)      (sizeof(arr) / sizeof((arr)[0]))
+#define MAX_EVENTS          10
+#define ARRAY_SIZE(arr)     (sizeof(arr) / sizeof((arr)[0]))
+
+#define UTASK_DEBUG
+#ifdef UTASK_DEBUG
+#define UTASK_DEBUG(fmt, args...)    printf("[utask %s]"fmt"\n", __func__, ##args)
+#else
+#define UTASK_DEBUG(fmt, args...)
+#endif
 
 static struct list_head timer_list = LIST_HEAD_INIT(timer_list);
 
@@ -45,7 +53,7 @@ static void get_time(struct timeval *tv)
     tv->tv_usec = ts.tv_nsec / 1000;
 }
 
-static int timer_add(utimer_t *timer)
+int utimer_add(utimer_t *timer)
 {
     utimer_t *tmp;
     struct list_head *h = &timer_list;
@@ -66,7 +74,7 @@ static int timer_add(utimer_t *timer)
     return 0;
 }
 
-static void timer_cancel(utimer_t *timer)
+void utimer_cancel(utimer_t *timer)
 {
     if (!timer || !timer->waiting)
         return;
@@ -75,12 +83,12 @@ static void timer_cancel(utimer_t *timer)
     timer->waiting = false;
 }
 
-static void timer_set(utimer_t *timer, int msecs)
+void utimer_set(utimer_t *timer, int msecs)
 {
     struct timeval *time = &timer->time;
 
     if(!timer)
-        return -1;
+        return;
 
     get_time(time);
 
@@ -93,16 +101,16 @@ static void timer_set(utimer_t *timer, int msecs)
     }
 }
 
-int task_timer_remaining(utimer_t *timer)
+int utask_time_remaining(utask_t *t)
 {
     struct timeval now;
 
-    if (!timer || !timer->waiting)
+    if (!t || !t->timer.waiting)
         return -1;
 
     get_time(&now);
 
-    return tv_diff(&timer->time, &now);
+    return tv_diff(&t->timer.time, &now);
 }
 
 static int get_rest_time_from_timer()
@@ -128,7 +136,7 @@ static void clear_all_timer(void)
     utimer_t *t, *tmp;
 
     list_for_each_entry_safe(t, tmp, &timer_list, list)
-        timer_cancel(t);
+        utimer_cancel(t);
 }
 
 static void process_timer()
@@ -143,18 +151,18 @@ static void process_timer()
         if (tv_diff(&t->time, &tv) > 0)
             break;
 
-        timer_cancel(t);
+        utimer_cancel(t);
         if (t->handler)
             t->handler(t);
     }
 }
 
-static void task_add(task_queue_t *q, task_t *task)
+static void utask_add(utask_queue_t *q, utask_t *task)
 {
     if(!q || !task)
         return;
 
-    task_t *tmp;
+    utask_t *tmp;
     struct list_head *h = &q->head;
 
     pthread_mutex_lock(&q->mutex);
@@ -170,7 +178,7 @@ static void task_add(task_queue_t *q, task_t *task)
     pthread_mutex_unlock(&q->mutex);
 }
 
-static void task_delete(task_queue_t *q, task_t *task)
+static void utask_delete(utask_queue_t *q, utask_t *task)
 {
     if(!q || !task)
         return;
@@ -183,7 +191,7 @@ static void task_delete(task_queue_t *q, task_t *task)
     pthread_mutex_unlock(&q->mutex);
 }
 
-void task_kill(task_queue_t *q, task_t *t)
+void utask_kill(utask_queue_t *q, utask_t *t)
 {
     if(!q || !t)
         return;
@@ -193,33 +201,33 @@ void task_kill(task_queue_t *q, task_t *t)
     {
         printf("kill task, pid = %d\n", t->pid);
         kill(t->pid, SIGKILL);
-        task_delete(q, t);
+        utask_delete(q, t);
     }
 }
 
 
-static void clear_all_tasks(task_queue_t *q)
+static void clear_all_tasks(utask_queue_t *q)
 {
-    task_t *p, *tmp;
+    utask_t *p, *tmp;
 
     list_for_each_entry_safe(p, tmp, &q->head, list)
-        task_delete(q, p);
+        utask_delete(q, p);
 }
 
 static void _task_run_timeout(utimer_t *timer)
 {
-    task_t *task = container_of(timer, task_t, timer);
+    utask_t *task = container_of(timer, utask_t, timer);
     if(task->handler.kill)
         task->handler.kill(task->queue, task);
     if(task->running)
-        task_delete(task->queue, task);
+        utask_delete(task->queue, task);
     if(task->handler.complete)
         task->handler.complete(task->queue, task);
 }
 
 static void _task_timer_start(utimer_t *timer)
 {
-    task_t *task = container_of(timer, task_t, timer);
+    utask_t *task = container_of(timer, utask_t, timer);
 
     if(task->queue->running_tasks < task->queue->max_running_tasks)
     {
@@ -227,12 +235,12 @@ static void _task_timer_start(utimer_t *timer)
             task->handler.run(task->queue, task);
         if(task->pid > 0)
         {
-            task_add(task->queue, task);
+            utask_add(task->queue, task);
             if(task->timeout > 0)
             {
                 timer->handler = _task_run_timeout;
-                timer_set(timer, task->timeout);
-                timer_add(timer);
+                utimer_set(timer, task->timeout);
+                utimer_add(timer);
             }
         }
         else
@@ -242,25 +250,25 @@ static void _task_timer_start(utimer_t *timer)
         }
     }
     else
-        timer_add(&task->timer);
+        utimer_add(&task->timer);
 }
 
-void task_set_timer(task_t *task, int time, int timeout)
+void utask_set_timer(utask_t *task, int time, int timeout)
 {
     task->timer.waiting = false;
     task->timer.handler = _task_timer_start;
     task->timeout = timeout;
-    timer_set(&task->timer, time);
+    utimer_set(&task->timer, time);
 }
 
-void task_set_handler(task_t *task, void *run, void *kill, void *complete)
+void utask_set_handler(utask_t *task, void *run, void *kill, void *complete)
 {
     task->handler.run = run;
     task->handler.kill = kill;
     task->handler.complete = complete;
 }
 
-void task_register(task_queue_t *q, task_t *task, void *arg)
+void utask_register(utask_queue_t *q, utask_t *task, void *arg)
 {
     if(!q || !task)
         return;
@@ -270,12 +278,12 @@ void task_register(task_queue_t *q, task_t *task, void *arg)
     task->queue = q;
     task->arg = arg;
     task->running = false;
-    timer_add(&task->timer);
+    utimer_add(&task->timer);
 }
 
-void task_unregister(task_t *task)
+void utask_unregister(utask_t *task)
 {
-    timer_cancel(&task->timer);
+    utimer_cancel(&task->timer);
 }
 
 static void add_signal_handler(int signum, void (*handler)(int), struct sigaction *old)
@@ -315,9 +323,9 @@ static void init_signals()
     add_signal_handler(SIGPIPE, SIG_IGN, NULL);
 }
 
-static void process_task_exit(task_queue_t *q)
+static void process_task_exit(utask_queue_t *q)
 {
-    task_t *p, *tmp;
+    utask_t *p, *tmp;
     pid_t pid;
     int ret;
 
@@ -337,8 +345,8 @@ static void process_task_exit(task_queue_t *q)
             if (p->pid > pid)
                 break;
 
-            task_delete(q, p);
-            timer_cancel(&p->timer);
+            utask_delete(q, p);
+            utimer_cancel(&p->timer);
             if(p->handler.complete)
                 p->handler.complete(q, p);
         }
@@ -359,6 +367,9 @@ static int register_poll(ufd_t *fd, unsigned int events)
 {
     struct epoll_event ev;
     int op = fd->registered ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
+
+    if(poll_fd < 0)
+        return -1;
 
     memset(&ev, 0, sizeof(struct epoll_event));
 
@@ -394,14 +405,13 @@ int ufd_add(ufd_t *fd, unsigned int events)
 
     ret = register_poll(fd, events);
     if (ret < 0)
-        goto out;
+        return -1;
 
     fd->registered = true;
     fd->eof = false;
     fd->error = false;
 
-out:
-    return ret;
+    return 0;
 }
 
 int ufd_delete(ufd_t *fd)
@@ -412,6 +422,9 @@ int ufd_delete(ufd_t *fd)
         return -1;
     if(!fd->registered)
         return -1;
+    if(poll_fd < 0)
+        return -1;
+
     for (i = 0; i < cur_nfds; i++) {
         if (cur_fds[i] == fd)
             cur_fds[i] = NULL;
@@ -429,6 +442,9 @@ static int fetch_events()
 {
     int n, nfds;
     ufd_t *cur;
+
+    if(poll_fd < 0)
+        return -1;
 
     nfds = epoll_wait(poll_fd, events, ARRAY_SIZE(events), get_rest_time_from_timer());
     for (n = 0; n < nfds; ++n) {
@@ -465,6 +481,8 @@ static int init_poll()
     FD_ZERO(&read_set);
     FD_ZERO(&write_set);
     FD_ZERO(&except_set);
+
+    return 0;
 }
 
 static int register_poll(ufd_t *fd, unsigned int events)
@@ -509,14 +527,13 @@ int ufd_add(ufd_t *fd, unsigned int events)
 
     ret = register_poll(fd, events);
     if (ret < 0)
-        goto out;
+        return -1;
 
     fd->registered = true;
     fd->eof = false;
     fd->error = false;
 
-out:
-    return ret;
+    return 0;
 }
 
 int ufd_delete(ufd_t *fd)
@@ -550,6 +567,8 @@ int ufd_delete(ufd_t *fd)
     FD_CLR(fd->fd, &read_set);
     FD_CLR(fd->fd, &write_set);
     FD_CLR(fd->fd, &except_set);
+
+    return 0;
 }
 
 static int fetch_events()
@@ -621,7 +640,7 @@ static void process_events()
     }
 }
 
-static void task_queue_init(task_queue_t *q)
+static void task_queue_init(utask_queue_t *q)
 {
     if(!q)
         return;
@@ -633,14 +652,14 @@ static void task_queue_init(task_queue_t *q)
     pthread_mutex_init(&q->mutex ,NULL);
 }
 
-void tasks_init(task_queue_t *q)
+void utasks_init(utask_queue_t *q)
 {
     init_poll();
     init_signals();
     task_queue_init(q);
 }
 
-void tasks_loop(task_queue_t *q)
+void utasks_loop(utask_queue_t *q)
 {
     if(!q)
         return;
@@ -659,7 +678,7 @@ void tasks_loop(task_queue_t *q)
     }
 }
 
-void tasks_done(task_queue_t *q)
+void utasks_done(utask_queue_t *q)
 {
 #ifdef USE_EPOLL_PROTO
 	if (poll_fd >= 0) {

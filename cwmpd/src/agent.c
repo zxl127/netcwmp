@@ -28,7 +28,7 @@
 #include "cwmp_agent.h"
 #include <cwmp/session.h>
 #include "modules/data_model.h"
-#include "cwmp/task.h"
+#include "utask.h"
 #include "cwmp/task_list.h"
 
 #define MAX_SESSION_RETRY 3
@@ -415,7 +415,7 @@ void cwmp_agent_session(cwmp_t * cwmp)
 int cwmp_agent_run_tasks(cwmp_t * cwmp)
 {
     struct timeval now;
-    task_t *task = NULL;
+    utask_t *task = NULL;
 
 }
 
@@ -578,7 +578,7 @@ void cwmp_agent_create_session(cwmp_t *cwmp)
 
 }
 
-void cwmp_task_inform_run(task_queue_t *q, task_t *t)
+void cwmp_task_inform_run(utask_queue_t *q, utask_t *t)
 {
     FUNCTION_TRACE();
     cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
@@ -595,15 +595,15 @@ void cwmp_task_inform_run(task_queue_t *q, task_t *t)
     exit(EXIT_SUCCESS);
 }
 
-void cwmp_task_inform_complete(task_queue_t *q, task_t *t)
+void cwmp_task_inform_complete(utask_queue_t *q, utask_t *t)
 {
     int interval = 0;
     cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
 
     interval = cwmp_conf_get_int("cwmp:interval");
     cwmp_event_set_value(cwmp, INFORM_PERIODIC, 1, NULL, 0, 0, 0);
-    task_set_timer(t, interval * 1000, 10000);
-    task_register(q, t, NULL);
+    utask_set_timer(t, interval * 1000, 10000);
+    utask_register(q, t, NULL);
 
 //    pool_pfree(cwmp->pool, t);
     printf("inform task complete\n");
@@ -616,17 +616,17 @@ void cwmp_agent_start_session(cwmp_t * cwmp)
 
     int interval = cwmp_conf_get_int("cwmp:interval");
     cwmp_log_debug("interval = %d", interval);
-    task_t *task_inform = pool_palloc(cwmp->pool, sizeof(task_t));
-    task_set_timer(task_inform, interval * 1000, 10000);
-    task_set_handler(task_inform, cwmp_task_inform_run, task_kill, cwmp_task_inform_complete);
-    task_register(&cwmp->tasks, task_inform, NULL);
+    utask_t *task_inform = pool_palloc(cwmp->pool, sizeof(utask_t));
+    utask_set_timer(task_inform, interval * 1000, 10000);
+    utask_set_handler(task_inform, cwmp_task_inform_run, utask_kill, cwmp_task_inform_complete);
+    utask_register(&cwmp->tasks, task_inform, NULL);
     cwmp_agent_create_session(cwmp);
 
 
-    tasks_init(&cwmp->tasks);
+    utasks_init(&cwmp->tasks);
     init_httpd_server(cwmp);
-    tasks_loop(&cwmp->tasks);
-    tasks_done(&cwmp->tasks);
+    utasks_loop(&cwmp->tasks);
+    utasks_done(&cwmp->tasks);
 }
 
 
