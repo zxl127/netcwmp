@@ -28,7 +28,6 @@
 #include "cwmp_agent.h"
 #include <cwmp/session.h>
 #include "modules/data_model.h"
-#include "utask.h"
 #include "cwmp/task_list.h"
 
 #define MAX_SESSION_RETRY 3
