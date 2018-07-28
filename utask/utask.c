@@ -392,12 +392,13 @@ static int register_poll(ufd_t *fd, unsigned int events)
 
 int ufd_add(ufd_t *fd, unsigned int events)
 {
-    unsigned int fl;
+    int fl;
     int ret;
 
-    if(!fd)
+    if(!fd || fd->registered)
         return -1;
-    if (!fd->registered) {
+
+    if (events & EVENT_NONBLOCK) {
         fl = fcntl(fd->fd, F_GETFL, 0);
         fl |= O_NONBLOCK;
         fcntl(fd->fd, F_SETFL, fl);
@@ -515,15 +516,17 @@ static int register_poll(ufd_t *fd, unsigned int events)
 
 int ufd_add(ufd_t *fd, unsigned int events)
 {
-    unsigned int fl;
+    int fl;
     int ret;
 
     if(!fd || fd->registered)
         return -1;
 
-    fl = fcntl(fd->fd, F_GETFL, 0);
-    fl |= O_NONBLOCK;
-    fcntl(fd->fd, F_SETFL, fl);
+    if (events & EVENT_NONBLOCK) {
+        fl = fcntl(fd->fd, F_GETFL, 0);
+        fl |= O_NONBLOCK;
+        fcntl(fd->fd, F_SETFL, fl);
+    }
 
     ret = register_poll(fd, events);
     if (ret < 0)
@@ -555,7 +558,7 @@ int ufd_delete(ufd_t *fd)
             else
                 sel_fds[i] = sel_fds[i + 1];
         }
-        if(max < sel_fds[i]->fd)
+        if(sel_fds[i] && max < sel_fds[i]->fd)
             max = sel_fds[i]->fd;
     }
     max_fd = max;
@@ -680,13 +683,22 @@ void utasks_loop(utask_queue_t *q)
 
 void utasks_done(utask_queue_t *q)
 {
+    int i;
+    ufd_t *ufd;
+
 #ifdef USE_EPOLL_PROTO
-	if (poll_fd >= 0) {
-		close(poll_fd);
-		poll_fd = -1;
-	}
+    if (poll_fd >= 0) {
+        close(poll_fd);
+        poll_fd = -1;
+    }
 #endif
 
+    for(i = 0; i < MAX_EVENTS; ++i) {
+        ufd = cur_fds[i];
+        if(ufd && ufd->fd >= 0) {
+            close(ufd->fd);
+        }
+    }
     clear_all_timer();
     clear_all_tasks(q);
 }

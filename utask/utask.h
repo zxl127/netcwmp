@@ -8,6 +8,7 @@
 #define EVENT_READ              0x01
 #define EVENT_WRITE             0x02
 #define EVENT_EDGE_TRIGGER      0x04
+#define EVENT_NONBLOCK          0x08
 
 typedef struct u_fd ufd_t;
 typedef struct u_timer utimer_t;
