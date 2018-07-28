@@ -126,10 +126,13 @@ void task_server_run(utask_queue_t *q, utask_t *t)
     cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
 
     pid = fork();
-    if(pid < 0)
-        return;
-    if(pid)
+
+    if(pid != 0) {
         t->pid = pid;
+        http_socket_close(s);
+        http_socket_destroy(s);
+        return;
+    }
 
     http_request_create(&request, http_socket_get_pool(s));
     rc = http_read_request(s, request, http_socket_get_pool(s));
@@ -180,9 +183,11 @@ void task_server_run(utask_queue_t *q, utask_t *t)
     cwmp_event_set_value(cwmp, INFORM_CONNECTIONREQUEST, 1, NULL, 0, 0, 0);
     set_connection_request_true();
 fail:
+    http_socket_close(s);
     http_socket_destroy(s);
     if(rc > 0)
         cwmp_agent_create_session(cwmp);
+    pool_clear(cwmp->pool);
     exit(EXIT_SUCCESS);
 }
 
