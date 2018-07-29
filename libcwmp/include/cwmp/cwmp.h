@@ -300,8 +300,6 @@ struct cwmp_st
 
 	transfer_t    transfer_info;      //����Download��Upload
 
-    utask_queue_t tasks;
-
 	pool_t * pool;
 	parameter_node_t * root;
 

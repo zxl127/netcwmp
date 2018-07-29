@@ -90,7 +90,7 @@ static unsigned int __stdcall cwmp_worker_thread_httpd(cwmp_t * cwmp)
 static unsigned int cwmp_worker_thread_httpd(cwmp_t * cwmp)
 #endif
 {
-    return httpd_build_server(cwmp);
+//    return httpd_build_server(cwmp);
 }
 
 #ifdef WIN32

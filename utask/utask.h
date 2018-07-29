@@ -23,6 +23,7 @@ struct u_fd
     bool registered;
     unsigned int events;
 
+    void **args;
     void (*handler)(struct u_fd *f);
 };
 
@@ -33,50 +34,47 @@ struct u_timer
     bool waiting;
     struct timeval time;
 
+    void **args;
     void (*handler)(struct u_timer *timer);
-};
-
-struct task_handler {
-    void (*run)(utask_queue_t *q, utask_t *t);
-    void (*kill)(utask_queue_t *q, utask_t *t);
-    void (*complete)(utask_queue_t *q, utask_t *t);
 };
 
 struct u_task{
     struct list_head list;
 
-    void *arg;
     pid_t pid;
     int timeout;
     bool running;
     utimer_t timer;
-    utask_queue_t *queue;
-    struct task_handler handler;
+
+    void **args;
+    void (*run)(utask_queue_t *q, utask_t *t);
+    void (*kill)(utask_queue_t *q, utask_t *t);
+    void (*complete)(utask_queue_t *q, utask_t *t);
 };
 
 struct u_task_queue{
     struct list_head head;
 
-    bool stopped;
     int running_tasks;
     int max_running_tasks;
 
     pthread_mutex_t     mutex;
 };
 
+void **mk_args(int n, ...);
 int ufd_add(ufd_t *fd, unsigned int events);
 int ufd_delete(ufd_t *fd);
 int utimer_add(utimer_t *timer);
 void utimer_cancel(utimer_t *timer);
 void utimer_set(utimer_t *timer, int msecs);
 int utask_time_remaining(utask_t *t);
-void utask_kill(utask_queue_t *q, utask_t *t);
+void utask_kill(utask_t *t);
 void utask_set_timer(utask_t *task, int time, int timeout);
 void utask_set_handler(utask_t *task, void *run, void *kill, void *complete);
-void utask_register(utask_queue_t *q, utask_t *task, void *arg);
+void utask_register(utask_t *task, void **args);
 void utask_unregister(utask_t *task);
-void utasks_init(utask_queue_t *q);
-void utasks_loop(utask_queue_t *q);
-void utasks_done(utask_queue_t *q);
+void utasks_init();
+void utasks_loop();
+void utasks_done();
 
 #endif //__UTASK_H__

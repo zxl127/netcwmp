@@ -411,13 +411,6 @@ void cwmp_agent_session(cwmp_t * cwmp)
     cwmp_agent_start_session(cwmp);
 }
 
-int cwmp_agent_run_tasks(cwmp_t * cwmp)
-{
-    struct timeval now;
-    utask_t *task = NULL;
-
-}
-
 void cwmp_agent_create_session(cwmp_t *cwmp)
 {
     int rv;
@@ -568,64 +561,56 @@ void cwmp_agent_create_session(cwmp_t *cwmp)
         default:
             cwmp_log_debug(">>>>>>SESSION STATUS: Unknown session stutus");
             break;
-        }//end switch
-    }//end while(!session_close)
+        }
+    }
 
     cwmp_log_debug("session stutus: EXIT");
     cwmp_session_free(session);
     session = NULL;
-
 }
 
-void cwmp_task_inform_run(utask_queue_t *q, utask_t *t)
+void task_cwmp_session_run(utask_queue_t *q, utask_t *t)
 {
-    FUNCTION_TRACE();
-    cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
+    pid_t pid;
+    int interval = 0;
+    cwmp_t *cwmp = t->args[0];
 
-    pid_t pid = fork();
+    interval = cwmp_conf_get_int("cwmp:interval");
+    utask_set_timer(t, interval * 1000, 30000);
+    utask_register(t, t->args);
+
+    pid = fork();
     if(pid < 0)
         return;
     if(pid) {
         t->pid = pid;
         return;
     }
+    cwmp_event_set_value(cwmp, INFORM_PERIODIC, 1, NULL, 0, 0, 0);
     cwmp_agent_create_session(cwmp);
-//    execlp("gedit", "gedit", NULL);
+    pool_destroy(cwmp->pool);
     exit(EXIT_SUCCESS);
 }
 
-void cwmp_task_inform_complete(utask_queue_t *q, utask_t *t)
+void task_cwmp_session_complete(utask_queue_t *q, utask_t *t)
 {
-    int interval = 0;
-    cwmp_t *cwmp = container_of(q, cwmp_t, tasks);
-
-    interval = cwmp_conf_get_int("cwmp:interval");
-    cwmp_event_set_value(cwmp, INFORM_PERIODIC, 1, NULL, 0, 0, 0);
-    utask_set_timer(t, interval * 1000, 10000);
-    utask_register(q, t, NULL);
-
-//    pool_pfree(cwmp->pool, t);
     printf("inform task complete\n");
 }
 
 void cwmp_agent_start_session(cwmp_t * cwmp)
 {
-    FUNCTION_TRACE();
+    utask_t *task_inform;
 
+    utasks_init();
 
-    int interval = cwmp_conf_get_int("cwmp:interval");
-    cwmp_log_debug("interval = %d", interval);
-    utask_t *task_inform = pool_palloc(cwmp->pool, sizeof(utask_t));
-    utask_set_timer(task_inform, interval * 1000, 10000);
-    utask_set_handler(task_inform, cwmp_task_inform_run, utask_kill, cwmp_task_inform_complete);
-    utask_register(&cwmp->tasks, task_inform, NULL);
-    cwmp_agent_create_session(cwmp);
-
-
-    utasks_init(&cwmp->tasks);
+    task_inform = pool_palloc(cwmp->pool, sizeof(utask_t));
+    utask_set_timer(task_inform, 0, 0);
+    utask_set_handler(task_inform, task_cwmp_session_run, utask_kill, task_cwmp_session_complete);
+    utask_register(task_inform, &cwmp);
     init_httpd_server(cwmp);
-    utasks_loop(&cwmp->tasks);
-    utasks_done(&cwmp->tasks);
+
+    utasks_loop();
+    utasks_done();
 }
 
 
