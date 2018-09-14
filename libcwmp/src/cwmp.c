@@ -387,6 +387,35 @@ xmlnode_t * cwmp_xml_get_child_with_name(void * nodeptr, const char * nodeName)
     return children;
 }
 
+xmlnode_t * cwmp_xml_get_child_contain_name(void * nodeptr, const char * nodeName)
+{
+    xmlnode_t * children;
+    xmlnode_t * node = (xmlnode_t *)nodeptr;
+    if (node == NULL)
+    {
+        cwmp_log_error("Invalid parameter 'param' (null)");
+        return NULL;
+    }
+
+    children = XmlNodeGetFirstChild(node);
+    while (children != NULL)
+    {
+        if (children->nodeType != XML_ELEMENT_NODE)
+        {
+            children = XmlNodeGetNextSibling(children);
+        }
+        else
+        {
+            if (strcasestr(children->nodeName, nodeName))
+                break;
+            else
+                children = XmlNodeGetNextSibling(children);
+        }
+    }
+
+    return children;
+}
+
 xmlnode_t * cwmp_xml_create_child_node(env_t * env ,  xmlnode_t * parentNode, const char * ns, const char * nodeName, const char * nodeValue)
 {
     XmlElement * newNode;
@@ -861,21 +890,9 @@ xmlnode_t * cwmp_get_header_node(xmldoc_t *  doc)
         return NULL;
     }
 
-    node = cwmp_xml_get_child_with_name(root, SOAP_ENV_HEADER);
+    node = cwmp_xml_get_child_contain_name(root, ":"SOAP_XML_HEADER);
     if (node == NULL)
-    {
-        cwmp_log_debug("xml soap header not found1!");
-    }
-
-    if(node == NULL){
-    	if(strcmp(SOAP_ENV_HEADER, "SOAP-ENV:Header")==0){
-    		node = cwmp_xml_get_child_with_name(root, "soap:Header");
-		    if (node == NULL)
-		    {
-		        cwmp_log_info("xml soap header not found2!");
-		    }
-		 } 
-	}
+        cwmp_log_debug("xml document header is null!");
 	
     return node;
 }
@@ -892,21 +909,9 @@ xmlnode_t * cwmp_get_body_node(xmldoc_t *  doc)
         return NULL;
     }
 
-    node = cwmp_xml_get_child_with_name(root, SOAP_ENV_BODY);
+    node = cwmp_xml_get_child_contain_name(root, ":"SOAP_XML_BODY);
     if (node == NULL)
-    {
-        cwmp_log_info("xml soap body not found1!");
-    }
-
-    if(node == NULL){
-		if(strcmp(SOAP_ENV_BODY, "SOAP-ENV:Body")==0){
-    		node = cwmp_xml_get_child_with_name(root, "soap:Body");
-		    if (node == NULL)
-		    {
-		        cwmp_log_info("xml soap body not found2!");
-		    }
-		 } 
-	}
+        cwmp_log_debug("xml document body is null!");
 	
     return node;
 }
